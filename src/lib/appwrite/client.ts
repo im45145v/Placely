@@ -2,13 +2,19 @@
  * Browser-side Appwrite client.
  * Uses only the public project endpoint and project ID — never a server API key.
  * Safe to import in Client Components and hooks.
+ *
+ * Validation of required environment variables happens at client-construction
+ * time via getPublicEnv(), providing a clear error instead of a silent failure.
  */
 import { Client, Account, Databases, Storage } from "appwrite";
-import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "./constants";
+import { getPublicEnv } from "@/lib/validation/env";
 
 function createBrowserClient(): Client {
+  const env = getPublicEnv();
   const client = new Client();
-  client.setEndpoint(APPWRITE_ENDPOINT).setProject(APPWRITE_PROJECT_ID);
+  client
+    .setEndpoint(env.NEXT_PUBLIC_APPWRITE_ENDPOINT)
+    .setProject(env.NEXT_PUBLIC_APPWRITE_PROJECT_ID);
   return client;
 }
 

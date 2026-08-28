@@ -1,11 +1,13 @@
 /**
  * Appwrite resource IDs used throughout the application.
- * All IDs are read from environment variables validated at startup.
+ * Public values are read from NEXT_PUBLIC_* environment variables.
+ * Full validation happens in the Appwrite client constructors via getPublicEnv() / getServerEnv().
  */
 
 export const APPWRITE_ENDPOINT =
   process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT ?? "https://cloud.appwrite.io/v1";
 
+// Intentionally left as-is — validated in createBrowserClient() / createServerClient()
 export const APPWRITE_PROJECT_ID =
   process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID ?? "";
 
