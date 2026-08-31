@@ -9,7 +9,7 @@
 // User / Auth
 // ---------------------------------------------------------------------------
 
-export type UserRole = "student" | "placement_admin" | "super_admin";
+export type UserRole = "STUDENT" | "PLACEMENT_ADMIN" | "SUPER_ADMIN";
 
 export interface AppUser {
   /** Appwrite Auth user ID */
@@ -19,6 +19,7 @@ export interface AppUser {
   universityId: string;
   role: UserRole;
   isActive: boolean;
+  onboardingCompletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +35,56 @@ export interface University {
   logoUrl?: string;
   isActive: boolean;
   createdAt: string;
+  updatedAt: string;
+}
+
+export type PlacementStatus = "NOT_PLACED" | "PLACED" | "OPTED_OUT";
+
+export interface StudentProfile {
+  $id: string;
+  userId: string;
+  universityId: string;
+  personalInfo: {
+    phone?: string;
+    dateOfBirth?: string;
+    gender?: string;
+  };
+  academic: {
+    tenthPercentage?: number;
+    twelfthPercentage?: number;
+    diplomaPercentage?: number;
+    ugDegree?: string;
+    ugInstitution?: string;
+    ugBranch?: string;
+    ugCgpa?: number;
+    graduationYear?: number;
+    activeBacklogs?: number;
+    totalBacklogs?: number;
+    academicGaps?: number;
+  };
+  professional: {
+    previousCompanies: string[];
+    previousTitles: string[];
+    totalWorkExperienceMonths?: number;
+    internships: string[];
+    certifications: string[];
+    skills: string[];
+    projects: string[];
+  };
+  placement: {
+    status: PlacementStatus;
+    numberOfOffers: number;
+    currentOfferId?: string;
+    currentOfferCtc?: number;
+    placementHistory: string[];
+    selectedCompany?: string;
+    offerStatus?: string;
+    verifiedAcademicData?: boolean;
+  };
+  customFields: Record<string, unknown>;
+  isProfileComplete: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +334,68 @@ export interface Variable {
   options?: string[];
   isBuiltIn: boolean;
   description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoundParticipant {
+  $id: string;
+  roundId: string;
+  applicationId: string;
+  studentId: string;
+  score?: number;
+  passed?: boolean;
+  notes?: string;
+  resultPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoundResult {
+  $id: string;
+  roundId: string;
+  applicationId: string;
+  studentId: string;
+  universityId: string;
+  outcome: "PASSED" | "FAILED" | "WAITLISTED" | "SELECTED";
+  score?: number;
+  feedback?: string;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentMetadata {
+  $id: string;
+  universityId: string;
+  ownerUserId: string;
+  entityType: string;
+  entityId: string;
+  bucketId: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  checksum?: string;
+  tags: string[];
+  isPrivate: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlacementRule {
+  $id: string;
+  universityId: string;
+  name: string;
+  description?: string;
+  ruleType:
+    | "max_applications"
+    | "max_per_company"
+    | "offer_restriction"
+    | "salary_restriction"
+    | "custom";
+  config: Record<string, unknown>;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }

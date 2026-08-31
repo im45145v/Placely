@@ -10,11 +10,12 @@
  *
  * SERVER-SIDE ONLY — do not import from Client Components.
  */
-import { Databases, ID, type Models, Query } from "node-appwrite";
+import { Databases, type Models } from "node-appwrite";
 import { createServerClient } from "@/lib/appwrite/server";
 import { Collections } from "@/lib/appwrite/constants";
 import type { AppUser, UserRole } from "@/types";
 import { isNotFoundError } from "@/lib/errors";
+import { USER_ROLES } from "./roles";
 
 /** Default university ID until multi-university support is needed. */
 const DEFAULT_UNIVERSITY_ID = "default";
@@ -36,24 +37,28 @@ export async function syncUserRecord(
   const databases = new Databases(createServerClient());
   const dbId = process.env.APPWRITE_DATABASE_ID ?? "";
 
-  // 1. Try to read existing document
+  // 1. Try to read the existing document by Appwrite Auth user ID.
+  // We intentionally mirror the auth user ID as the document ID.
   try {
-    const docs = await databases.listDocuments(dbId, Collections.USERS, [
-      Query.equal("userId", authUser.$id),
-      Query.limit(1),
-    ]);
-
-    if (docs.total > 0) {
-      return docToAppUser(docs.documents[0] as Models.DefaultDocument);
-    }
+    const doc = await databases.getDocument<Models.DefaultDocument>(
+      dbId,
+      Collections.USERS,
+      authUser.$id
+    );
+    const user = docToAppUser(doc);
+    await ensureStudentProfile(databases, dbId, user);
+    return user;
   } catch (err) {
-    if (!isNotFoundError(err)) {
-      // Collection doesn't exist yet — synthesise a minimal user so auth works
-      // during development before the DB is provisioned.
-      console.warn("[syncUserRecord] users collection not found — using synthesised user");
+    if (isNotFoundError(err)) {
+      // Document not found yet — fall through to create.
+    } else {
+      // Unexpected read failure — keep auth usable during development.
+      console.warn(
+        "[syncUserRecord] Failed to read users document — using synthesised user",
+        err
+      );
       return synthesiseAppUser(authUser);
     }
-    // 404 on the query means no matching document — fall through to create
   }
 
   // 2. Create new user document
@@ -62,9 +67,10 @@ export async function syncUserRecord(
     const data: Omit<AppUser, "$id"> = {
       name: authUser.name,
       email: authUser.email,
-      universityId: DEFAULT_UNIVERSITY_ID,
-      role: "student" as UserRole,
+      universityId: inferUniversityId(authUser.email),
+      role: USER_ROLES.STUDENT as UserRole,
       isActive: true,
+      onboardingCompletedAt: now,
       createdAt: now,
       updatedAt: now,
     };
@@ -76,8 +82,9 @@ export async function syncUserRecord(
       authUser.$id,
       data
     );
-
-    return docToAppUser(doc);
+    const user = docToAppUser(doc);
+    await ensureStudentProfile(databases, dbId, user);
+    return user;
   } catch (createErr) {
     console.warn("[syncUserRecord] Failed to create user document:", createErr);
     // Graceful degradation — return synthesised user so login still succeeds
@@ -112,8 +119,9 @@ function docToAppUser(doc: Models.DefaultDocument): AppUser {
     name: doc["name"] as string,
     email: doc["email"] as string,
     universityId: (doc["universityId"] as string) ?? DEFAULT_UNIVERSITY_ID,
-    role: (doc["role"] as UserRole) ?? "student",
+    role: (doc["role"] as UserRole) ?? USER_ROLES.STUDENT,
     isActive: (doc["isActive"] as boolean) ?? true,
+    onboardingCompletedAt: doc["onboardingCompletedAt"] as string | undefined,
     createdAt: doc["createdAt"] as string ?? doc.$createdAt,
     updatedAt: doc["updatedAt"] as string ?? doc.$updatedAt,
   };
@@ -127,10 +135,69 @@ function synthesiseAppUser(
     $id: authUser.$id,
     name: authUser.name,
     email: authUser.email,
-    universityId: DEFAULT_UNIVERSITY_ID,
-    role: "student",
+    universityId: inferUniversityId(authUser.email),
+    role: USER_ROLES.STUDENT,
     isActive: true,
+    onboardingCompletedAt: now,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+async function ensureStudentProfile(
+  databases: Databases,
+  dbId: string,
+  user: AppUser
+): Promise<void> {
+  if (user.role !== USER_ROLES.STUDENT) {
+    return;
+  }
+
+  try {
+    await databases.getDocument(dbId, Collections.STUDENT_PROFILES, user.$id);
+  } catch (err) {
+    if (!isNotFoundError(err)) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    await databases.createDocument(
+      dbId,
+      Collections.STUDENT_PROFILES,
+      user.$id,
+      {
+        userId: user.$id,
+        universityId: user.universityId,
+        personalInfo: {},
+        academic: {},
+        professional: {
+          previousCompanies: [],
+          previousTitles: [],
+          internships: [],
+          certifications: [],
+          skills: [],
+          projects: [],
+        },
+        placement: {
+          status: "NOT_PLACED",
+          numberOfOffers: 0,
+          placementHistory: [],
+          verifiedAcademicData: false,
+        },
+        customFields: {},
+        isProfileComplete: false,
+        createdAt: now,
+        updatedAt: now,
+      }
+    );
+  }
+}
+
+function inferUniversityId(email: string): string {
+  const domain = email.split("@")[1]?.toLowerCase();
+  if (!domain) {
+    return DEFAULT_UNIVERSITY_ID;
+  }
+
+  return domain.replace(/[^a-z0-9]+/g, "-");
 }
