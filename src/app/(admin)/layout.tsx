@@ -12,15 +12,7 @@ import { Header } from "@/components/layout/Header";
 import { requireRoleAccess } from "@/lib/auth/guards";
 import { USER_ROLES } from "@/lib/auth/roles";
 import { listImportantAnnouncements } from "@/lib/announcements/service";
-
-const ADMIN_NAV = [
-  { label: "Dashboard", href: "/admin/dashboard" },
-  { label: "Students", href: "/admin/students" },
-  { label: "Companies", href: "/admin/companies" },
-  { label: "Roles", href: "/admin/roles" },
-  { label: "Variables", href: "/admin/variables" },
-  { label: "Applications", href: "/admin/applications" },
-];
+import { ADMIN_NAV } from "@/lib/admin/registry";
 
 export default async function AdminLayout({
   children,

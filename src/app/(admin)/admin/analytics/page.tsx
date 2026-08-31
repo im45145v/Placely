@@ -1,22 +1,17 @@
 import type { Metadata } from "next";
-import { PageWrapper, PageHeader } from "@/components/layout/PageWrapper";
-import { LogoutButton } from "@/features/auth/LogoutButton";
+import { PageHeader, PageWrapper } from "@/components/layout/PageWrapper";
+import { AdminAnalyticsDashboard } from "@/features/admin/AdminAnalyticsDashboard";
 import { requireRoleAccess } from "@/lib/auth/guards";
 import { USER_ROLES } from "@/lib/auth/roles";
 import { getAdminAnalyticsReport, listAdminAnalyticsFilterOptions } from "@/lib/analytics/service";
-import { listSubmittedResumesForAdmin } from "@/lib/resumes/service";
-import { AdminAnalyticsDashboard } from "@/features/admin/AdminAnalyticsDashboard";
-import { AdminResumeReview } from "@/features/admin/AdminResumeReview";
-import { AdminOverview } from "@/features/admin/AdminOverview";
-import { getAdminDashboardSummary } from "@/lib/admin/service";
 
 export const metadata: Metadata = {
-  title: "Admin Dashboard",
+  title: "Admin Analytics",
 };
 
 const ADMIN_ROLES = [USER_ROLES.PLACEMENT_ADMIN, USER_ROLES.SUPER_ADMIN] as const;
 
-export default async function AdminDashboardPage({
+export default async function AdminAnalyticsPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
@@ -34,27 +29,18 @@ export default async function AdminDashboardPage({
     dateFrom: getSingleParam(params.dateFrom),
     dateTo: getSingleParam(params.dateTo),
   };
-  const [pendingResumes, analyticsReport, filterOptions, summary] = await Promise.all([
-    listSubmittedResumesForAdmin(actor),
+  const [analyticsReport, filterOptions] = await Promise.all([
     getAdminAnalyticsReport(actor, filters),
     listAdminAnalyticsFilterOptions(actor),
-    getAdminDashboardSummary(actor),
   ]);
 
   return (
     <PageWrapper>
       <PageHeader
-        title="Admin Dashboard"
-        description="Placement analytics, cohort breakdowns, and resume verification workflow."
-        action={<LogoutButton />}
+        title="Analytics"
+        description="Dedicated analytics workspace with server-side cohort filters, funnel metrics, breakdowns, and CSV export."
       />
-      <AdminOverview summary={summary} />
-      <div className="mt-6">
       <AdminAnalyticsDashboard report={analyticsReport} companies={filterOptions.companies} roles={filterOptions.roles} />
-      </div>
-      <div className="mt-6">
-      <AdminResumeReview initialRecords={pendingResumes} />
-      </div>
     </PageWrapper>
   );
 }
