@@ -283,14 +283,27 @@ export type RuleOperator =
   | "gte"
   | "lt"
   | "lte"
+  | "contains"
+  | "not_contains"
   | "in"
-  | "not_in";
+  | "not_in"
+  | "before"
+  | "on_or_before"
+  | "after"
+  | "on_or_after";
+
+export type RuleValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Array<string | number | boolean>;
 
 export interface ConditionNode {
   type: "condition";
   variable: string;
   operator: RuleOperator;
-  value: string | number | boolean | string[];
+  value: RuleValue;
 }
 
 export interface GroupNode {

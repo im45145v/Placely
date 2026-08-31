@@ -3,6 +3,8 @@ import { PageHeader, PageWrapper } from "@/components/layout/PageWrapper";
 import { getStudentProfileForActor } from "@/lib/student-profile/service";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { ProfileForm } from "@/features/profile/ProfileForm";
+import { getResumeSummaryForActor } from "@/lib/resumes/service";
+import { ResumeManager } from "@/features/profile/ResumeManager";
 
 export const metadata: Metadata = {
   title: "My Profile",
@@ -11,6 +13,7 @@ export const metadata: Metadata = {
 export default async function StudentProfilePage() {
   const actor = await requireStudentAccess();
   const profile = await getStudentProfileForActor(actor);
+  const resumes = await getResumeSummaryForActor(actor);
 
   return (
     <PageWrapper>
@@ -18,6 +21,7 @@ export default async function StudentProfilePage() {
         title="My profile"
         description="Manage your identity, academic, professional, and permitted placement settings."
       />
+      <ResumeManager initialSummary={resumes} />
       <ProfileForm initialProfile={profile} />
     </PageWrapper>
   );

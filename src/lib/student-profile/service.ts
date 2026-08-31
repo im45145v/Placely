@@ -21,7 +21,6 @@ export async function getStudentProfileForActor(
   actor: AppUser,
   targetUserId = actor.$id
 ): Promise<StudentProfileView> {
-  const databases = getServerDatabases();
   const user = await readUser(targetUserId);
   const profile = await readStudentProfileByUserId(targetUserId);
 

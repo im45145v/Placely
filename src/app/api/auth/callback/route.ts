@@ -23,6 +23,7 @@ import {
   buildSessionCookieHeader,
   buildClearSessionCookieHeader,
 } from "@/lib/auth/cookies";
+import { getRoleDestination } from "@/lib/auth/roles";
 import { syncUserRecord } from "@/lib/auth/userSync";
 
 const APP_URL =
@@ -78,15 +79,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
     response.headers.set("Set-Cookie", buildClearSessionCookieHeader());
     return response;
-  }
-}
-
-function getRoleDestination(role: string): string {
-  switch (role) {
-    case "super_admin":
-    case "placement_admin":
-      return "/admin/dashboard";
-    default:
-      return "/dashboard";
   }
 }

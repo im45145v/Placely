@@ -15,7 +15,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /** Routes accessible only to authenticated users. */
-const PROTECTED_PREFIXES = ["/dashboard", "/admin", "/profile"];
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/admin",
+  "/profile",
+  "/companies",
+  "/roles",
+  "/applications",
+  "/rounds",
+  "/notifications",
+];
 
 /** Routes that authenticated users should be redirected away from. */
 const AUTH_ONLY_PATHS = ["/login"];
