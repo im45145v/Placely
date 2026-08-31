@@ -351,6 +351,41 @@ export interface NotificationTemplate {
   updatedAt: string;
 }
 
+export type EmailDeliveryStatus =
+  | "pending"
+  | "sending"
+  | "retrying"
+  | "sent"
+  | "failed";
+
+export type EmailDeliveryProvider = "google_apps_script" | "log";
+
+export interface EmailDelivery {
+  $id: string;
+  userId: string;
+  universityId: string;
+  notificationType: NotificationType;
+  templateKey: string;
+  dedupeKey: string;
+  provider: EmailDeliveryProvider;
+  status: EmailDeliveryStatus;
+  toEmail: string;
+  subject: string;
+  title: string;
+  body: string;
+  payload?: Record<string, unknown>;
+  attempts: number;
+  maxAttempts: number;
+  lastAttemptAt?: string;
+  nextAttemptAt?: string;
+  sentAt?: string;
+  providerMessageId?: string;
+  providerResponse?: Record<string, unknown>;
+  lastError?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Announcement {
   $id: string;
   universityId: string;

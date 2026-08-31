@@ -16,6 +16,7 @@ const schema = {
     { id: "round_participants", name: "RoundParticipant" },
     { id: "results", name: "RoundResult" },
     { id: "notifications", name: "Notification" },
+    { id: "email_deliveries", name: "EmailDelivery" },
     { id: "notification_templates", name: "NotificationTemplate" },
     { id: "document_metadata", name: "DocumentMetadata" },
     { id: "audit_logs", name: "AuditLog" },

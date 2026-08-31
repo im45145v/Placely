@@ -29,6 +29,7 @@ export const Collections = {
   RESULTS: "results",
   RESUMES: "resumes",
   NOTIFICATIONS: "notifications",
+  EMAIL_DELIVERIES: "email_deliveries",
   NOTIFICATION_TEMPLATES: "notification_templates",
   ANNOUNCEMENTS: "announcements",
   AUDIT_LOGS: "audit_logs",

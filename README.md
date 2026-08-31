@@ -78,8 +78,13 @@ See [.env.example](.env.example) for all required variables with descriptions.
 | `NEXT_PUBLIC_APP_URL` | Yes | Client + Server |
 | `APPWRITE_API_KEY` | Yes | Server only |
 | `APPWRITE_DATABASE_ID` | Yes | Server only |
+| `APPWRITE_SHORTLISTING_FUNCTION_ID` | No | Server only |
+| `APPWRITE_NOTIFICATION_FUNCTION_ID` | No | Server only |
+| `EMAIL_AUTOMATION_PROVIDER` | No | Server only |
+| `GOOGLE_APPS_SCRIPT_WEB_APP_URL` | No | Server only |
+| `GOOGLE_APPS_SCRIPT_AUTH_TOKEN` | No | Server only |
 
-> **Security:** Never add `APPWRITE_API_KEY` to a `NEXT_PUBLIC_*` variable. It must remain server-only.
+> **Security:** Never add `APPWRITE_API_KEY`, `GOOGLE_APPS_SCRIPT_WEB_APP_URL`, or `GOOGLE_APPS_SCRIPT_AUTH_TOKEN` to a `NEXT_PUBLIC_*` variable. They must remain server-only.
 
 ---
 

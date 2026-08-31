@@ -19,6 +19,9 @@ export interface ServerEnv {
   APPWRITE_DATABASE_ID: string;
   APPWRITE_SHORTLISTING_FUNCTION_ID?: string;
   APPWRITE_NOTIFICATION_FUNCTION_ID?: string;
+  EMAIL_AUTOMATION_PROVIDER?: "google_apps_script" | "log";
+  GOOGLE_APPS_SCRIPT_WEB_APP_URL?: string;
+  GOOGLE_APPS_SCRIPT_AUTH_TOKEN?: string;
 }
 
 function assertEnvVar(name: string, value: string | undefined): string {
@@ -76,5 +79,19 @@ export function getServerEnv(): ServerEnv {
     ),
     APPWRITE_SHORTLISTING_FUNCTION_ID: process.env.APPWRITE_SHORTLISTING_FUNCTION_ID?.trim() || undefined,
     APPWRITE_NOTIFICATION_FUNCTION_ID: process.env.APPWRITE_NOTIFICATION_FUNCTION_ID?.trim() || undefined,
+    EMAIL_AUTOMATION_PROVIDER: normalizeOptionalProvider(process.env.EMAIL_AUTOMATION_PROVIDER),
+    GOOGLE_APPS_SCRIPT_WEB_APP_URL: process.env.GOOGLE_APPS_SCRIPT_WEB_APP_URL?.trim() || undefined,
+    GOOGLE_APPS_SCRIPT_AUTH_TOKEN: process.env.GOOGLE_APPS_SCRIPT_AUTH_TOKEN?.trim() || undefined,
   };
+}
+
+function normalizeOptionalProvider(value: string | undefined): "google_apps_script" | "log" | undefined {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "google_apps_script" || normalized === "log") {
+    return normalized;
+  }
+  throw new Error("EMAIL_AUTOMATION_PROVIDER must be one of: google_apps_script, log.");
 }
