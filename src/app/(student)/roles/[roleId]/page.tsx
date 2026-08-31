@@ -5,6 +5,7 @@ import { PageHeader, PageWrapper } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { getRoleDetailForStudent } from "@/lib/companies/service";
 import { formatCtc, formatDate } from "@/lib/utils";
+import { StudentApplyButton } from "@/features/applications/StudentApplyButton";
 
 export const metadata: Metadata = {
   title: "Role",
@@ -47,6 +48,7 @@ export default async function RoleDetailPage({
             <p><strong>Deadline:</strong> {role.applicationDeadline ? formatDate(role.applicationDeadline) : "Open deadline"}</p>
             <p><strong>Joining date:</strong> {role.joiningDate ? formatDate(role.joiningDate) : "Not set"}</p>
             <p><strong>Work mode:</strong> {role.workMode ?? "Not set"}</p>
+            <StudentApplyButton roleId={role.$id} />
           </CardContent>
         </Card>
       </div>

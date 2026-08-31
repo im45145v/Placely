@@ -19,7 +19,7 @@ export default async function StudentProfilePage() {
     <PageWrapper>
       <PageHeader
         title="My profile"
-        description="Manage your identity, academic, professional, and permitted placement settings."
+        description="Manage your identity, academic, professional, custom variable, and permitted placement settings."
       />
       <ResumeManager initialSummary={resumes} />
       <ProfileForm initialProfile={profile} />

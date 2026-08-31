@@ -2,7 +2,7 @@ import { ID, Models, Query } from "node-appwrite";
 import { Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 import { getServerDatabases } from "@/lib/appwrite/server";
 import { calculateProfileCompletion } from "@/lib/student-profile/rules";
-import type { AppUser, EligibilityRuleSet, StudentProfile, Variable } from "@/types";
+import type { AppUser, EligibilityRuleSet, StudentProfile } from "@/types";
 import { AppError } from "@/lib/errors";
 import { evaluateEligibilityRule, validateEligibilityRuleTree } from "./engine";
 import type {
@@ -12,28 +12,16 @@ import type {
   EligibilityStudentRecord,
   EligibilityVariableDefinition,
 } from "./types";
-import { BUILT_IN_ELIGIBILITY_VARIABLES } from "./variables";
+import {
+  buildVariableContextForUniversity,
+  extractVariableValuesFromStudentProfile,
+} from "@/lib/variables/service";
 
 export async function listEligibilityVariablesForUniversity(
   actor: AppUser
 ): Promise<EligibilityVariableDefinition[]> {
-  const databases = getServerDatabases();
-  const result = await databases.listDocuments<Models.DefaultDocument>(
-    DATABASE_ID,
-    Collections.VARIABLES,
-    [Query.equal("universityId", actor.universityId), Query.limit(100)]
-  );
-
-  const customVariables = result.documents.map((doc) => ({
-    name: String(doc.name),
-    label: String(doc.label),
-    type: doc.type as Variable["type"],
-    options: Array.isArray(doc.options) ? (doc.options as string[]) : undefined,
-    isBuiltIn: Boolean(doc.isBuiltIn),
-    description: (doc.description as string | null) ?? undefined,
-  }));
-
-  return [...BUILT_IN_ELIGIBILITY_VARIABLES, ...customVariables];
+  const context = await buildVariableContextForUniversity(actor);
+  return context.definitions;
 }
 
 export async function previewEligibilityForRole(
@@ -168,8 +156,8 @@ export async function readEligibilityRuleSet(ruleSetId: string): Promise<Eligibi
 }
 
 async function loadVariableMap(actor: AppUser): Promise<Map<string, EligibilityVariableDefinition>> {
-  const variables = await listEligibilityVariablesForUniversity(actor);
-  return new Map(variables.map((variable) => [variable.name, variable]));
+  const context = await buildVariableContextForUniversity(actor);
+  return context.variableMap;
 }
 
 async function resolveRoleRuleTree(roleId: string): Promise<EligibilityRuleSet["ruleTree"] | null> {
@@ -233,21 +221,11 @@ async function loadEligibilityStudentRecords(universityId: string): Promise<Elig
       profileId: profile.$id,
       universityId,
       values: {
-        cgpa: profile.academic.ugCgpa ?? null,
-        active_backlogs: profile.academic.activeBacklogs ?? null,
-        total_backlogs: profile.academic.totalBacklogs ?? null,
-        academic_gaps: profile.academic.academicGaps ?? null,
-        ug_branch: profile.academic.ugBranch ?? null,
-        ug_degree: profile.academic.ugDegree ?? null,
-        graduation_year: profile.academic.graduationYear ?? null,
         is_profile_complete: completion === 100,
-        placement_status: profile.placement.status,
-        verified_academic_data: profile.placement.verifiedAcademicData ?? false,
-        number_of_offers: profile.placement.numberOfOffers ?? 0,
-        date_of_birth: profile.personalInfo.dateOfBirth ?? null,
-        skills: profile.professional.skills ?? [],
-        certifications: profile.professional.certifications ?? [],
-        internships: profile.professional.internships ?? [],
+        ...extractVariableValuesFromStudentProfile({
+          ...profile,
+          isProfileComplete: completion === 100,
+        }),
       },
     };
   });

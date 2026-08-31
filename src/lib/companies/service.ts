@@ -10,6 +10,7 @@ import {
   updateEligibilityRuleSet,
 } from "@/lib/eligibility/service";
 import { AppError, isNotFoundError } from "@/lib/errors";
+import { dispatchNotificationEvent } from "@/lib/notifications/service";
 import type { AppUser, Company, DocumentMetadata, EligibilityRuleSet, Role } from "@/types";
 
 const PAGE_SIZE = 10;
@@ -519,6 +520,7 @@ async function changeRoleStatus(actor: AppUser, roleId: string, status: Role["st
   assertAdmin(actor);
   const role = await readRole(roleId);
   assertRoleScope(actor, role);
+  const company = await readCompany(role.companyId);
   const { databases } = createServerServices();
   const updated = await databases.updateDocument<Models.DefaultDocument>(
     DATABASE_ID,
@@ -526,7 +528,24 @@ async function changeRoleStatus(actor: AppUser, roleId: string, status: Role["st
     roleId,
     { status, updatedAt: new Date().toISOString() }
   );
-  return docToRole(updated);
+  const nextRole = docToRole(updated);
+
+  if (status === "published" && role.status !== "published") {
+    await dispatchNotificationEvent({
+      type: "COMPANY_PUBLISHED",
+      universityId: role.universityId,
+      entityId: role.$id,
+      entityType: "role",
+      dedupeKey: `role-published:${role.$id}:${updated.$updatedAt ?? nextRole.updatedAt}`,
+      variables: {
+        company_name: company.name,
+        role_name: nextRole.title,
+        deadline: nextRole.applicationDeadline ?? "Open deadline",
+      },
+    });
+  }
+
+  return nextRole;
 }
 
 async function uploadCompanyLogo(

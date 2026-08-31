@@ -32,6 +32,7 @@ export const Collections = {
   NOTIFICATION_TEMPLATES: "notification_templates",
   ANNOUNCEMENTS: "announcements",
   AUDIT_LOGS: "audit_logs",
+  BULK_OPERATIONS: "bulk_operations",
   PLACEMENT_RULES: "placement_rules",
   OFFERS: "offers",
   SETTINGS: "settings",

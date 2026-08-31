@@ -4,6 +4,7 @@ import { Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 import { getServerDatabases } from "@/lib/appwrite/server";
 import { AppError, isNotFoundError } from "@/lib/errors";
 import type { AppUser, StudentProfile } from "@/types";
+import { listActiveVariablesForUniversity, validateVariableValues } from "@/lib/variables/service";
 import {
   buildPlacementFromStudentInput,
   calculateProfileCompletion,
@@ -23,12 +24,13 @@ export async function getStudentProfileForActor(
 ): Promise<StudentProfileView> {
   const user = await readUser(targetUserId);
   const profile = await readStudentProfileByUserId(targetUserId);
+  const variableDefinitions = await listActiveVariablesForUniversity(actor);
 
   if (!canViewStudentProfile(actor, user.$id, user.universityId)) {
     throw AppError.forbidden("You do not have access to this profile.");
   }
 
-  return toStudentProfileView(user, profile);
+  return toStudentProfileView(user, profile, variableDefinitions);
 }
 
 export async function updateStudentProfileForActor(
@@ -39,6 +41,7 @@ export async function updateStudentProfileForActor(
   const databases = getServerDatabases();
   const user = await readUser(targetUserId);
   const profile = await readStudentProfileByUserId(targetUserId);
+  const variableDefinitions = await listActiveVariablesForUniversity(actor);
 
   if (!canEditStudentProfile(actor, user.$id, user.universityId)) {
     throw AppError.forbidden("You do not have permission to update this profile.");
@@ -55,6 +58,11 @@ export async function updateStudentProfileForActor(
     profile.placement as StudentProfile["placement"] & Record<string, unknown>,
     effectivePayload.placement
   );
+  const customFieldValidation = validateVariableValues(variableDefinitions, effectivePayload.customFields ?? profile.customFields);
+
+  if (!customFieldValidation.valid) {
+    throw AppError.validationError("Invalid custom variable values.", customFieldValidation.errors);
+  }
 
   const nextUser = {
     ...user,
@@ -86,7 +94,7 @@ export async function updateStudentProfileForActor(
       projects: professionalPatch.projects ?? profile.professional.projects,
     },
     placement,
-    customFields: profile.customFields,
+    customFields: customFieldValidation.normalizedValues,
     isProfileComplete: false,
     createdAt: profile.createdAt,
     updatedAt: new Date().toISOString(),
@@ -125,7 +133,7 @@ export async function updateStudentProfileForActor(
     }
   );
 
-  return toStudentProfileView(nextUser, docToStudentProfile(updatedProfileDoc, profile.$id));
+  return toStudentProfileView(nextUser, docToStudentProfile(updatedProfileDoc, profile.$id), variableDefinitions);
 }
 
 async function readUser(userId: string): Promise<AppUser> {
@@ -204,7 +212,8 @@ function docToStudentProfile(
 
 function toStudentProfileView(
   user: AppUser,
-  profile: StudentProfile
+  profile: StudentProfile,
+  customVariableDefinitions: Awaited<ReturnType<typeof listActiveVariablesForUniversity>>
 ): StudentProfileView {
   const completionPercentage = calculateProfileCompletion({
     identity: {
@@ -231,6 +240,8 @@ function toStudentProfileView(
       academic: profile.academic,
       professional: profile.professional,
       placement: profile.placement as StudentProfileView["profile"]["placement"],
+      customFields: profile.customFields,
+      customVariableDefinitions: customVariableDefinitions.filter((item) => !item.isBuiltIn),
       completionPercentage,
       isProfileComplete: completionPercentage === 100,
       createdAt: profile.createdAt,

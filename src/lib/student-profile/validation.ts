@@ -21,7 +21,16 @@ export function validateStudentProfileUpdatePayload(
     academic: validateAcademic(value.academic),
     professional: validateProfessional(value.professional),
     placement: validatePlacement(value.placement),
+    customFields: validateCustomFields(value.customFields),
   };
+}
+
+function validateCustomFields(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  assertObject(value, "customFields");
+  return value as Record<string, unknown>;
 }
 
 function validateIdentity(value: unknown): Partial<StudentIdentityUpdate> | undefined {

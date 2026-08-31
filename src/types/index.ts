@@ -203,6 +203,35 @@ export interface Application {
   updatedAt: string;
 }
 
+export type BulkOperationStatus = "queued" | "running" | "completed" | "failed";
+
+export type BulkOperationAction =
+  | "bulk_shortlist"
+  | "auto_shortlist"
+  | "bulk_reject"
+  | "bulk_move_to_round"
+  | "csv_import"
+  | "csv_export";
+
+export interface BulkOperation {
+  $id: string;
+  universityId: string;
+  actorId: string;
+  actorRole: UserRole;
+  action: BulkOperationAction;
+  status: BulkOperationStatus;
+  targetCount: number;
+  processedCount: number;
+  successCount: number;
+  failureCount: number;
+  input: Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Placement Round
 // ---------------------------------------------------------------------------
@@ -242,34 +271,96 @@ export interface PlacementRound {
   updatedAt: string;
 }
 
+export type RoundOutcome = "PASSED" | "FAILED" | "WAITLISTED" | "SELECTED";
+
+export interface RoundParticipant {
+  $id: string;
+  roundId: string;
+  applicationId: string;
+  studentId: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  location?: string;
+  meetingLink?: string;
+  instructions?: string;
+  interviewerIds: string[];
+  score?: number;
+  passed?: boolean;
+  notes?: string;
+  resultPublished: boolean;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoundResult {
+  $id: string;
+  roundId: string;
+  applicationId: string;
+  studentId: string;
+  universityId: string;
+  outcome: RoundOutcome;
+  score?: number;
+  feedback?: string;
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Notification
 // ---------------------------------------------------------------------------
 
 export type NotificationType =
-  | "role_published"
-  | "eligible_role"
-  | "application_submitted"
-  | "shortlisted"
-  | "round_scheduled"
-  | "round_rescheduled"
-  | "result_published"
-  | "deadline_approaching"
-  | "deadline_reached"
-  | "announcement"
-  | "general";
+  | "COMPANY_PUBLISHED"
+  | "APPLICATION_SUBMITTED"
+  | "SHORTLISTED"
+  | "ROUND_SCHEDULED"
+  | "ROUND_UPDATED"
+  | "RESULT_PUBLISHED"
+  | "DEADLINE_REMINDER"
+  | "ANNOUNCEMENT";
 
 export interface Notification {
   $id: string;
   userId: string;
   universityId: string;
   type: NotificationType;
+  templateKey: string;
+  dedupeKey: string;
   title: string;
   body: string;
   data?: Record<string, unknown>;
   isRead: boolean;
   readAt?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationTemplate {
+  $id: string;
+  universityId: string;
+  type: NotificationType;
+  channel: "in_app" | "email";
+  subjectTemplate: string;
+  titleTemplate: string;
+  bodyTemplate: string;
+  variables: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Announcement {
+  $id: string;
+  universityId: string;
+  title: string;
+  body: string;
+  isImportant: boolean;
+  publishedAt: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -341,12 +432,15 @@ export type VariableType =
 export interface Variable {
   $id: string;
   universityId: string;
+  id: string;
   name: string;
   label: string;
+  description?: string;
   type: VariableType;
   options?: string[];
+  source: "built_in" | "custom";
+  isActive: boolean;
   isBuiltIn: boolean;
-  description?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -402,10 +496,13 @@ export interface PlacementRule {
   name: string;
   description?: string;
   ruleType:
-    | "max_applications"
-    | "max_per_company"
-    | "offer_restriction"
-    | "salary_restriction"
+    | "max_applications_per_student"
+    | "max_applications_per_company"
+    | "max_active_applications"
+    | "offer_based_restriction"
+    | "ctc_based_restriction"
+    | "selected_student_restriction"
+    | "round_specific_restriction"
     | "custom";
   config: Record<string, unknown>;
   isActive: boolean;

@@ -8,8 +8,10 @@
  * - Provides the authenticated user to Client Components via AuthProvider.
  */
 import { AuthProvider } from "@/features/auth/AuthContext";
+import { ImportantAnnouncementsFeed } from "@/features/announcements/ImportantAnnouncementsFeed";
 import { Header } from "@/components/layout/Header";
 import { requireStudentAccess } from "@/lib/auth/guards";
+import { listImportantAnnouncements } from "@/lib/announcements/service";
 
 const STUDENT_NAV = [
   { label: "Dashboard", href: "/dashboard" },
@@ -25,6 +27,7 @@ export default async function StudentLayout({
   children: React.ReactNode;
 }) {
   const appUser = await requireStudentAccess();
+  const announcements = await listImportantAnnouncements(appUser);
 
   return (
     <AuthProvider user={appUser}>
@@ -33,6 +36,7 @@ export default async function StudentLayout({
           navItems={STUDENT_NAV}
           userDisplayName={appUser.name}
         />
+        <ImportantAnnouncementsFeed initialAnnouncements={announcements} />
         <main className="flex-1">{children}</main>
       </div>
     </AuthProvider>

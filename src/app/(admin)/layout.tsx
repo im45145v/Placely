@@ -7,15 +7,18 @@
  * - Unauthenticated users are redirected to /login.
  */
 import { AuthProvider } from "@/features/auth/AuthContext";
+import { ImportantAnnouncementsFeed } from "@/features/announcements/ImportantAnnouncementsFeed";
 import { Header } from "@/components/layout/Header";
 import { requireRoleAccess } from "@/lib/auth/guards";
 import { USER_ROLES } from "@/lib/auth/roles";
+import { listImportantAnnouncements } from "@/lib/announcements/service";
 
 const ADMIN_NAV = [
   { label: "Dashboard", href: "/admin/dashboard" },
   { label: "Students", href: "/admin/students" },
   { label: "Companies", href: "/admin/companies" },
   { label: "Roles", href: "/admin/roles" },
+  { label: "Variables", href: "/admin/variables" },
   { label: "Applications", href: "/admin/applications" },
 ];
 
@@ -28,6 +31,7 @@ export default async function AdminLayout({
     USER_ROLES.PLACEMENT_ADMIN,
     USER_ROLES.SUPER_ADMIN,
   ]);
+  const announcements = await listImportantAnnouncements(appUser);
 
   return (
     <AuthProvider user={appUser}>
@@ -36,6 +40,7 @@ export default async function AdminLayout({
           navItems={ADMIN_NAV}
           userDisplayName={`${appUser.name} (${appUser.role === USER_ROLES.SUPER_ADMIN ? "Super Admin" : "Admin"})`}
         />
+        <ImportantAnnouncementsFeed initialAnnouncements={announcements} />
         <main className="flex-1">{children}</main>
       </div>
     </AuthProvider>

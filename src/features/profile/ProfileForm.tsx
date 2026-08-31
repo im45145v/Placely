@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import type { StudentProfileView, StudentProfileUpdatePayload } from "@/lib/student-profile/types";
+import type { VariableDefinition } from "@/lib/variables/types";
 
 interface ProfileFormProps {
   initialProfile: StudentProfileView;
@@ -33,6 +34,7 @@ interface FormState {
   skills: string;
   projects: string;
   optedOut: boolean;
+  customFields: Record<string, string | boolean>;
 }
 
 export function ProfileForm({ initialProfile }: ProfileFormProps) {
@@ -49,7 +51,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
     setError(null);
 
     startTransition(async () => {
-      const payload = toPayload(state);
+      const payload = toPayload(state, initialProfile.profile.customVariableDefinitions);
       const response = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -65,6 +67,7 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
       setMessage("Profile updated.");
       setCompletion(data.profile.completionPercentage);
       setPlacement(data.profile.placement);
+      setState(toFormState(data));
     });
   }
 
@@ -138,6 +141,24 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
           Opt out of placement participation
         </label>
       </Section>
+
+      {initialProfile.profile.customVariableDefinitions.length > 0 ? (
+        <Section title="Custom variables" description="Admin-managed profile fields validated against each variable type.">
+          {initialProfile.profile.customVariableDefinitions.map((variable) => (
+            <CustomVariableField
+              key={variable.name}
+              variable={variable}
+              value={state.customFields[variable.name]}
+              onChange={(value) =>
+                setState((current) => ({
+                  ...current,
+                  customFields: { ...current.customFields, [variable.name]: value },
+                }))
+              }
+            />
+          ))}
+        </Section>
+      ) : null}
 
       {(message || error) && (
         <p className={error ? "text-sm text-destructive" : "text-sm text-foreground"}>
@@ -232,6 +253,83 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function CustomVariableField({
+  variable,
+  value,
+  onChange,
+}: {
+  variable: VariableDefinition;
+  value: string | boolean | undefined;
+  onChange: (value: string | boolean) => void;
+}) {
+  if (variable.type === "boolean") {
+    return (
+      <label className="flex items-center gap-3 rounded-md border border-border p-3 text-sm">
+        <input
+          type="checkbox"
+          checked={value === true}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span className="font-medium">{variable.label}</span>
+      </label>
+    );
+  }
+
+  if ((variable.type === "single_select" || variable.type === "multi_select") && variable.options?.length) {
+    return (
+      <label className={`flex flex-col gap-2 text-sm ${variable.type === "multi_select" ? "md:col-span-2" : ""}`}>
+        <span className="font-medium text-foreground">{variable.label}</span>
+        {variable.description ? <span className="text-xs text-muted-foreground">{variable.description}</span> : null}
+        {variable.type === "single_select" ? (
+          <select
+            className="rounded-md border border-input bg-background px-3 py-2"
+            value={typeof value === "string" ? value : ""}
+            onChange={(event) => onChange(event.target.value)}
+          >
+            <option value="">Select</option>
+            {variable.options.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : (
+          <div className="grid gap-2">
+            {variable.options.map((option) => {
+              const selected = new Set(String(value ?? "").split("\n").filter(Boolean));
+              return (
+                <label key={option} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(option)}
+                    onChange={(event) => {
+                      const next = new Set(selected);
+                      if (event.target.checked) {
+                        next.add(option);
+                      } else {
+                        next.delete(option);
+                      }
+                      onChange(Array.from(next).join("\n"));
+                    }}
+                  />
+                  {option}
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </label>
+    );
+  }
+
+  return (
+    <TextField
+      label={variable.label}
+      type={variable.type === "number" ? "number" : variable.type === "date" ? "date" : "text"}
+      value={typeof value === "string" ? value : ""}
+      onChange={onChange as (value: string) => void}
+    />
+  );
+}
+
 function toFormState(profile: StudentProfileView): FormState {
   return {
     name: profile.identity.name,
@@ -257,10 +355,23 @@ function toFormState(profile: StudentProfileView): FormState {
     skills: profile.profile.professional.skills.join("\n"),
     projects: profile.profile.professional.projects.join("\n"),
     optedOut: profile.profile.placement.status === "OPTED_OUT",
+    customFields: profile.profile.customVariableDefinitions.reduce<Record<string, string | boolean>>((accumulator, variable) => {
+      const rawValue = profile.profile.customFields[variable.name];
+      if (variable.type === "boolean") {
+        accumulator[variable.name] = rawValue === true;
+      } else if (Array.isArray(rawValue)) {
+        accumulator[variable.name] = rawValue.join("\n");
+      } else if (rawValue === null || rawValue === undefined) {
+        accumulator[variable.name] = "";
+      } else {
+        accumulator[variable.name] = String(rawValue);
+      }
+      return accumulator;
+    }, {}),
   };
 }
 
-function toPayload(state: FormState): StudentProfileUpdatePayload {
+function toPayload(state: FormState, customVariables: VariableDefinition[]): StudentProfileUpdatePayload {
   return {
     identity: {
       name: state.name,
@@ -293,7 +404,30 @@ function toPayload(state: FormState): StudentProfileUpdatePayload {
     placement: {
       optedOut: state.optedOut,
     },
+    customFields: Object.fromEntries(
+      customVariables.map((variable) => [
+        variable.name,
+        parseCustomFieldValue(variable, state.customFields[variable.name]),
+      ])
+    ),
   };
+}
+
+function parseCustomFieldValue(variable: VariableDefinition, value: string | boolean | undefined): unknown {
+  if (variable.type === "boolean") {
+    return value === true;
+  }
+  if (variable.type === "number") {
+    return typeof value === "string" && value.trim() ? Number(value) : null;
+  }
+  if (variable.type === "multi_select") {
+    return typeof value === "string" ? splitLines(value) : [];
+  }
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function splitLines(value: string): string[] {

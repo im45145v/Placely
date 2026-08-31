@@ -1,14 +1,22 @@
-import type { EligibilityRuleSet, RuleNode, RuleOperator, RuleValue, Variable, VariableType } from "@/types";
+import type { EligibilityRuleSet, RuleNode, RuleOperator, RuleValue, VariableType } from "@/types";
+import type { VariableDefinition } from "@/lib/variables/types";
 
 export type EligibilityComparableValue = string | number | boolean | Date | null;
 
 export interface EligibilityVariableDefinition {
+  $id?: string;
+  id?: string;
+  universityId?: string;
   name: string;
   label: string;
   type: VariableType;
   description?: string;
   options?: string[];
+  source?: "built_in" | "custom";
+  isActive?: boolean;
   isBuiltIn: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface EligibilityStudentRecord {
@@ -46,5 +54,5 @@ export interface EligibilityRuleValidationResult {
   errors: string[];
 }
 
-export type PersistedVariableDefinition = Variable | EligibilityVariableDefinition;
+export type PersistedVariableDefinition = VariableDefinition | EligibilityVariableDefinition;
 export type { RuleNode, RuleOperator, RuleValue };

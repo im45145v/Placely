@@ -21,6 +21,7 @@ Placely uses Appwrite Databases only. No SQL schema, MongoDB schema, or browser-
 - `RoundParticipant`
 - `RoundResult`
 - `Notification`
+- `NotificationTemplate`
 - `DocumentMetadata`
 - `AuditLog`
 - `CustomVariable`

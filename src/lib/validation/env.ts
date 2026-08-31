@@ -17,6 +17,8 @@ export interface PublicEnv {
 export interface ServerEnv {
   APPWRITE_API_KEY: string;
   APPWRITE_DATABASE_ID: string;
+  APPWRITE_SHORTLISTING_FUNCTION_ID?: string;
+  APPWRITE_NOTIFICATION_FUNCTION_ID?: string;
 }
 
 function assertEnvVar(name: string, value: string | undefined): string {
@@ -72,5 +74,7 @@ export function getServerEnv(): ServerEnv {
       "APPWRITE_DATABASE_ID",
       process.env.APPWRITE_DATABASE_ID
     ),
+    APPWRITE_SHORTLISTING_FUNCTION_ID: process.env.APPWRITE_SHORTLISTING_FUNCTION_ID?.trim() || undefined,
+    APPWRITE_NOTIFICATION_FUNCTION_ID: process.env.APPWRITE_NOTIFICATION_FUNCTION_ID?.trim() || undefined,
   };
 }

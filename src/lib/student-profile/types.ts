@@ -1,4 +1,5 @@
 import type { AppUser, PlacementStatus, StudentProfile } from "@/types";
+import type { VariableDefinition } from "@/lib/variables/types";
 
 export interface StudentIdentityUpdate {
   name: string;
@@ -60,6 +61,8 @@ export interface StudentProfileView {
     academic: StudentAcademicData;
     professional: StudentProfessionalData;
     placement: AdminPlacementData;
+    customFields: Record<string, unknown>;
+    customVariableDefinitions: VariableDefinition[];
     completionPercentage: number;
     isProfileComplete: boolean;
     createdAt: string;
@@ -72,4 +75,5 @@ export interface StudentProfileUpdatePayload {
   academic?: Partial<StudentAcademicData>;
   professional?: Partial<StudentProfessionalData>;
   placement?: StudentPlacementEditableData;
+  customFields?: Record<string, unknown>;
 }
