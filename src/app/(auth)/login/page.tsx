@@ -1,9 +1,9 @@
 /**
  * Login page — "Continue with Google" button.
  *
- * Calls buildGoogleLoginUrl() server action to get the Appwrite OAuth2 URL,
- * then redirects the browser to it.  The OAuth flow completes at:
- *   /api/auth/callback?userId=...&secret=...
+ * The button redirects to `/api/auth/login`, which creates the OAuth state
+ * cookie and forwards the browser to Appwrite's Google OAuth flow. The OAuth
+ * flow completes at `/api/auth/callback`.
  */
 import type { Metadata } from "next";
 import { LoginForm } from "@/features/auth/LoginForm";

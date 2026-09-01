@@ -6,24 +6,22 @@
  */
 "use client";
 
-import { useState, useTransition } from "react";
-import { buildGoogleLoginUrl } from "@/features/auth/actions";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 export function LoginForm(): React.ReactElement {
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function handleGoogleLogin(): void {
     setError(null);
-    startTransition(async () => {
-      try {
-        const url = await buildGoogleLoginUrl();
-        window.location.href = url;
-      } catch {
-        setError("Failed to initiate sign-in. Please try again.");
-      }
-    });
+    try {
+      setIsPending(true);
+      window.location.href = "/api/auth/login";
+    } catch {
+      setIsPending(false);
+      setError("Failed to initiate sign-in. Please try again.");
+    }
   }
 
   return (
