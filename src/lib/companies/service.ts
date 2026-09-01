@@ -2,6 +2,7 @@ import { ID, Models, Query } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
 import { Buckets, Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 import { createServerServices } from "@/lib/appwrite/server";
+import { createAuditLog } from "@/lib/audit/service";
 import { USER_ROLES } from "@/lib/auth/roles";
 import {
   createEligibilityRuleSet,
@@ -152,8 +153,14 @@ export async function createCompanyForAdmin(
       updatedAt: now,
     }
   );
-
-  return docToCompany(doc);
+  const company = docToCompany(doc);
+  await createAuditLog(actor, {
+    action: "company.created",
+    entityType: "company",
+    entityId: company.$id,
+    newValue: company as unknown as Record<string, unknown>,
+  });
+  return company;
 }
 
 export async function updateCompanyForAdmin(
@@ -190,8 +197,15 @@ export async function updateCompanyForAdmin(
       updatedAt: new Date().toISOString(),
     }
   );
-
-  return docToCompany(updated);
+  const nextCompany = docToCompany(updated);
+  await createAuditLog(actor, {
+    action: "company.updated",
+    entityType: "company",
+    entityId: companyId,
+    previousValue: company as unknown as Record<string, unknown>,
+    newValue: nextCompany as unknown as Record<string, unknown>,
+  });
+  return nextCompany;
 }
 
 export async function archiveCompanyForAdmin(actor: AppUser, companyId: string): Promise<Company> {
@@ -205,7 +219,15 @@ export async function archiveCompanyForAdmin(actor: AppUser, companyId: string):
     companyId,
     { isActive: false, updatedAt: new Date().toISOString() }
   );
-  return docToCompany(updated);
+  const nextCompany = docToCompany(updated);
+  await createAuditLog(actor, {
+    action: "company.archived",
+    entityType: "company",
+    entityId: companyId,
+    previousValue: company as unknown as Record<string, unknown>,
+    newValue: nextCompany as unknown as Record<string, unknown>,
+  });
+  return nextCompany;
 }
 
 export async function createRoleForAdmin(
@@ -252,6 +274,12 @@ export async function createRoleForAdmin(
     }
   );
   const role = docToRole(doc);
+  await createAuditLog(actor, {
+    action: "role.created",
+    entityType: "role",
+    entityId: role.$id,
+    newValue: role as unknown as Record<string, unknown>,
+  });
   return saveRoleEligibility(actor, role, payload);
 }
 
@@ -300,6 +328,13 @@ export async function updateRoleForAdmin(
     }
   );
   const nextRole = docToRole(updated);
+  await createAuditLog(actor, {
+    action: "role.updated",
+    entityType: "role",
+    entityId: roleId,
+    previousValue: role as unknown as Record<string, unknown>,
+    newValue: nextRole as unknown as Record<string, unknown>,
+  });
   return saveRoleEligibility(actor, nextRole, payload);
 }
 
@@ -350,7 +385,15 @@ export async function duplicateRoleForAdmin(actor: AppUser, roleId: string): Pro
       updatedAt: now,
     }
   );
-  return docToRole(duplicated);
+  const copiedRole = docToRole(duplicated);
+  await createAuditLog(actor, {
+    action: "role.duplicated",
+    entityType: "role",
+    entityId: copiedRole.$id,
+    previousValue: role as unknown as Record<string, unknown>,
+    newValue: copiedRole as unknown as Record<string, unknown>,
+  });
+  return copiedRole;
 }
 
 export async function listRolesForAdmin(
@@ -529,6 +572,13 @@ async function changeRoleStatus(actor: AppUser, roleId: string, status: Role["st
     { status, updatedAt: new Date().toISOString() }
   );
   const nextRole = docToRole(updated);
+  await createAuditLog(actor, {
+    action: status === "published" ? "company.published" : "role.status_changed",
+    entityType: status === "published" ? "company_publication" : "role",
+    entityId: roleId,
+    previousValue: { status: role.status, roleId: role.$id, companyId: role.companyId },
+    newValue: { status: nextRole.status, roleId: nextRole.$id, companyId: nextRole.companyId },
+  });
 
   if (status === "published" && role.status !== "published") {
     await dispatchNotificationEvent({

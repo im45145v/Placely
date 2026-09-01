@@ -22,6 +22,8 @@ import { getServerSession } from "@/lib/auth/session";
 import { createSessionScopedClient } from "@/lib/auth/session";
 import { cookies } from "next/headers";
 import { getSessionCookieName } from "@/lib/auth/cookies";
+import { createAuditLog } from "@/lib/audit/service";
+import { getAppUser } from "@/lib/auth/userSync";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -60,6 +62,15 @@ export async function logout(): Promise<void> {
 
   if (session) {
     try {
+      const appUser = await getAppUser(session.authUser.$id);
+      if (appUser) {
+        await createAuditLog(appUser, {
+          action: "auth.logout",
+          entityType: "session",
+          entityId: session.authUser.$id,
+          newValue: { email: session.authUser.email },
+        });
+      }
       const client = createSessionScopedClient(session.sessionSecret);
       const account = new Account(client);
       // "current" deletes the session identified by the session token

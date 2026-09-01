@@ -2,6 +2,7 @@ import { ID, Models, Query } from "node-appwrite";
 import { Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 import { getServerDatabases } from "@/lib/appwrite/server";
 import { calculateProfileCompletion } from "@/lib/student-profile/rules";
+import { createAuditLog } from "@/lib/audit/service";
 import type { AppUser, EligibilityRuleSet, StudentProfile } from "@/types";
 import { AppError } from "@/lib/errors";
 import { evaluateEligibilityRule, validateEligibilityRuleTree } from "./engine";
@@ -114,8 +115,14 @@ export async function createEligibilityRuleSet(
       updatedAt: now,
     }
   );
-
-  return docToEligibilityRuleSet(result);
+  const ruleSet = docToEligibilityRuleSet(result);
+  await createAuditLog(actor, {
+    action: "eligibility.created",
+    entityType: "eligibility_rule",
+    entityId: ruleSet.$id,
+    newValue: ruleSet as unknown as Record<string, unknown>,
+  });
+  return ruleSet;
 }
 
 export async function updateEligibilityRuleSet(
@@ -124,6 +131,7 @@ export async function updateEligibilityRuleSet(
   input: EligibilityRuleDraft
 ): Promise<EligibilityRuleSet> {
   const databases = getServerDatabases();
+  const existing = await readEligibilityRuleSet(ruleSetId);
   const variables = await loadVariableMap(actor);
   assertValidRule(input.ruleTree, { variables });
   const result = await databases.updateDocument<Models.DefaultDocument>(
@@ -137,8 +145,15 @@ export async function updateEligibilityRuleSet(
       updatedAt: new Date().toISOString(),
     }
   );
-
-  return docToEligibilityRuleSet(result);
+  const ruleSet = docToEligibilityRuleSet(result);
+  await createAuditLog(actor, {
+    action: "eligibility.updated",
+    entityType: "eligibility_rule",
+    entityId: ruleSetId,
+    previousValue: (existing ?? {}) as Record<string, unknown>,
+    newValue: ruleSet as unknown as Record<string, unknown>,
+  });
+  return ruleSet;
 }
 
 export async function readEligibilityRuleSet(ruleSetId: string): Promise<EligibilityRuleSet | null> {

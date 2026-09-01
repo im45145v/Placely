@@ -53,8 +53,13 @@ interface RoundDraft {
 interface ParticipantDraft {
   scheduledStart: string;
   scheduledEnd: string;
+  slotLabel: string;
+  room: string;
   location: string;
   meetingLink: string;
+  scheduleTimezone: string;
+  scheduleStatus: "pending" | "scheduled" | "rescheduled" | "cancelled";
+  cancellationReason: string;
   instructions: string;
   interviewerIds: string;
   score: string;
@@ -62,6 +67,18 @@ interface ParticipantDraft {
   outcome: "" | RoundOutcome;
   feedback: string;
   publishResult: boolean;
+}
+
+interface BulkScheduleDraft {
+  startTime: string;
+  durationMinutes: string;
+  gapMinutes: string;
+  room: string;
+  location: string;
+  meetingLink: string;
+  interviewerIds: string;
+  instructions: string;
+  scheduleTimezone: string;
 }
 
 export function AdminApplicationsManager({ initialData, initialFilters }: AdminApplicationsManagerProps) {
@@ -79,6 +96,7 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
   );
   const [newRoundDraft, setNewRoundDraft] = useState<RoundDraft>(createEmptyRoundDraft());
   const [participantDrafts, setParticipantDrafts] = useState<Record<string, ParticipantDraft>>({});
+  const [bulkScheduleDrafts, setBulkScheduleDrafts] = useState<Record<string, BulkScheduleDraft>>({});
   const [isPending, startTransition] = useTransition();
   const refreshInFlightRef = useRef(false);
   const refreshQueuedRef = useRef(false);
@@ -376,10 +394,15 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scheduledStart: draft.scheduledStart || undefined,
-          scheduledEnd: draft.scheduledEnd || undefined,
+          scheduledStart: draft.scheduledStart ? toIsoFromLocalInput(draft.scheduledStart) : undefined,
+          scheduledEnd: draft.scheduledEnd ? toIsoFromLocalInput(draft.scheduledEnd) : undefined,
+          slotLabel: draft.slotLabel || undefined,
+          room: draft.room || undefined,
           location: draft.location || undefined,
           meetingLink: draft.meetingLink || undefined,
+          scheduleTimezone: draft.scheduleTimezone || undefined,
+          scheduleStatus: draft.scheduleStatus,
+          cancellationReason: draft.cancellationReason || undefined,
           instructions: draft.instructions || undefined,
           interviewerIds: draft.interviewerIds.split(",").map((item) => item.trim()).filter(Boolean),
           score: draft.score ? Number(draft.score) : undefined,
@@ -392,6 +415,56 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
       const updated = await readJson(response) as ApplicationDetail;
       updateApplication(updated);
       setMessage("Participant updated.");
+    });
+  }
+
+  function bulkScheduleRound(round: PlacementRound): void {
+    const participants = (participantsByRound.get(round.$id) ?? []).map(({ workflow }) => workflow.participant!).filter(Boolean);
+    const draft = bulkScheduleDrafts[round.$id] ?? createBulkScheduleDraft();
+    if (participants.length === 0) {
+      setError("No participants are available to bulk schedule.");
+      return;
+    }
+    if (!draft.startTime) {
+      setError("Select a bulk schedule start time.");
+      return;
+    }
+    const duration = Number(draft.durationMinutes);
+    const gap = Number(draft.gapMinutes || "0");
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setError("Duration must be a positive number of minutes.");
+      return;
+    }
+
+    withRequest(async () => {
+      const baseStart = new Date(toIsoFromLocalInput(draft.startTime));
+      const slots = participants.map((participant, index) => {
+        const start = new Date(baseStart.getTime() + index * (duration + gap) * 60_000);
+        const end = new Date(start.getTime() + duration * 60_000);
+        return {
+          scheduledStart: start.toISOString(),
+          scheduledEnd: end.toISOString(),
+          slotLabel: `Slot ${index + 1}`,
+          room: draft.room || undefined,
+          location: draft.location || undefined,
+          meetingLink: draft.meetingLink || undefined,
+          interviewerIds: draft.interviewerIds.split(",").map((item) => item.trim()).filter(Boolean),
+          instructions: draft.instructions || undefined,
+          scheduleTimezone: draft.scheduleTimezone || detectUserTimeZone(),
+        };
+      });
+      const response = await fetch(`/api/admin/roles/${initialFilters.roleId}/rounds/${round.$id}/bulk-schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          participantIds: participants.map((participant) => participant.$id),
+          slots,
+        }),
+      });
+      const updated = await readJson(response) as ApplicationDetail[];
+      const byId = new Map(updated.map((item) => [item.$id, item]));
+      setApplications((current) => current.map((item) => byId.get(item.$id) ?? item));
+      setMessage("Round participants scheduled.");
     });
   }
 
@@ -493,9 +566,25 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
                     <div className="mt-4 space-y-3">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-medium">Participants</p>
-                        <Button type="button" size="sm" variant="outline" onClick={() => { setRoundId(round.$id); runBulkAction("move_to_round", "selection"); }} disabled={selectedIds.length === 0} loading={isPending}>
-                          Add selected candidates
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => { setRoundId(round.$id); runBulkAction("move_to_round", "selection"); }} disabled={selectedIds.length === 0} loading={isPending}>
+                            Add selected candidates
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => bulkScheduleRound(round)} loading={isPending}>
+                            Bulk schedule
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-4">
+                        <input type="datetime-local" value={bulkScheduleDrafts[round.$id]?.startTime ?? ""} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), startTime: event.target.value } }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.durationMinutes ?? "30"} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), durationMinutes: event.target.value } }))} placeholder="Duration minutes" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.gapMinutes ?? "0"} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), gapMinutes: event.target.value } }))} placeholder="Gap minutes" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.room ?? ""} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), room: event.target.value } }))} placeholder="Room" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.location ?? ""} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), location: event.target.value } }))} placeholder="Location" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.meetingLink ?? ""} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), meetingLink: event.target.value } }))} placeholder="Meeting link" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.interviewerIds ?? ""} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), interviewerIds: event.target.value } }))} placeholder="Interviewer IDs" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <input value={bulkScheduleDrafts[round.$id]?.scheduleTimezone ?? detectUserTimeZone()} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), scheduleTimezone: event.target.value } }))} placeholder="Timezone" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                        <textarea value={bulkScheduleDrafts[round.$id]?.instructions ?? ""} onChange={(event) => setBulkScheduleDrafts((current) => ({ ...current, [round.$id]: { ...(current[round.$id] ?? createBulkScheduleDraft()), instructions: event.target.value } }))} placeholder="Instructions for all slots" className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm md:col-span-4" />
                       </div>
                       {(participantsByRound.get(round.$id) ?? []).length === 0 ? (
                         <p className="text-sm text-muted-foreground">No participants assigned yet.</p>
@@ -520,10 +609,20 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
                                 <div className="grid gap-3 md:grid-cols-2">
                                   <input type="datetime-local" value={toLocalDateTimeValue(draft.scheduledStart)} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, scheduledStart: event.target.value } }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
                                   <input type="datetime-local" value={toLocalDateTimeValue(draft.scheduledEnd)} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, scheduledEnd: event.target.value } }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                                  <input value={draft.slotLabel} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, slotLabel: event.target.value } }))} placeholder="Slot label" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                                  <input value={draft.room} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, room: event.target.value } }))} placeholder="Room" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
                                   <input value={draft.location} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, location: event.target.value } }))} placeholder="Candidate location" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
                                   <input value={draft.meetingLink} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, meetingLink: event.target.value } }))} placeholder="Candidate meeting link" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                                  <input value={draft.scheduleTimezone} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, scheduleTimezone: event.target.value } }))} placeholder="Timezone" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                                  <select value={draft.scheduleStatus} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, scheduleStatus: event.target.value as ParticipantDraft["scheduleStatus"] } }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm">
+                                    <option value="pending">Pending</option>
+                                    <option value="scheduled">Scheduled</option>
+                                    <option value="rescheduled">Rescheduled</option>
+                                    <option value="cancelled">Cancelled</option>
+                                  </select>
                                   <input value={draft.interviewerIds} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, interviewerIds: event.target.value } }))} placeholder="Interviewer IDs, comma separated" className="rounded-md border border-input bg-background px-3 py-2 text-sm md:col-span-2" />
                                   <textarea value={draft.instructions} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, instructions: event.target.value } }))} placeholder="Candidate instructions" className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm md:col-span-2" />
+                                  <textarea value={draft.cancellationReason} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, cancellationReason: event.target.value } }))} placeholder="Cancellation reason" className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm md:col-span-2" />
                                   <input value={draft.score} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, score: event.target.value } }))} placeholder="Score" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
                                   <select value={draft.outcome} onChange={(event) => setParticipantDrafts((current) => ({ ...current, [participant.$id]: { ...draft, outcome: event.target.value as ParticipantDraft["outcome"] } }))} className="rounded-md border border-input bg-background px-3 py-2 text-sm">
                                     <option value="">Pending result</option>
@@ -784,8 +883,13 @@ function createParticipantDraft(participant: RoundParticipant, workflow?: Applic
   return {
     scheduledStart: toLocalDateTimeValue(participant.scheduledStart),
     scheduledEnd: toLocalDateTimeValue(participant.scheduledEnd),
+    slotLabel: participant.slotLabel ?? "",
+    room: participant.room ?? "",
     location: participant.location ?? workflow?.round.location ?? "",
     meetingLink: participant.meetingLink ?? workflow?.round.meetingLink ?? "",
+    scheduleTimezone: participant.scheduleTimezone ?? detectUserTimeZone(),
+    scheduleStatus: participant.scheduleStatus,
+    cancellationReason: participant.cancellationReason ?? "",
     instructions: participant.instructions ?? workflow?.round.instructions ?? "",
     interviewerIds: participant.interviewerIds.join(", "),
     score: participant.score !== undefined ? String(participant.score) : "",
@@ -793,6 +897,20 @@ function createParticipantDraft(participant: RoundParticipant, workflow?: Applic
     outcome: workflow?.result?.outcome ?? "",
     feedback: workflow?.result?.feedback ?? "",
     publishResult: participant.resultPublished || Boolean(workflow?.result?.publishedAt),
+  };
+}
+
+function createBulkScheduleDraft(): BulkScheduleDraft {
+  return {
+    startTime: "",
+    durationMinutes: "30",
+    gapMinutes: "0",
+    room: "",
+    location: "",
+    meetingLink: "",
+    interviewerIds: "",
+    instructions: "",
+    scheduleTimezone: detectUserTimeZone(),
   };
 }
 
@@ -804,4 +922,16 @@ function toLocalDateTimeValue(value?: string): string {
   const offset = date.getTimezoneOffset();
   const normalized = new Date(date.getTime() - offset * 60_000);
   return normalized.toISOString().slice(0, 16);
+}
+
+function toIsoFromLocalInput(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function detectUserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
 }

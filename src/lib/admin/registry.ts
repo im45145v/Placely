@@ -141,6 +141,11 @@ export const ADMIN_SECTIONS: AdminSectionConfig[] = [
     description: "Placement funnel and cohort analytics with server-side filtering and export.",
   },
   {
+    slug: "import-export",
+    label: "Import Export",
+    description: "Validated CSV and Excel-friendly TSV imports with preview/confirm processing plus data exports.",
+  },
+  {
     slug: "reports",
     label: "Reports",
     description: "Generated admin exports and operational batch history.",
@@ -178,8 +183,8 @@ export const ADMIN_SECTIONS: AdminSectionConfig[] = [
     filterFields: [
       { key: "actorRole", label: "Actor Role", options: ["PLACEMENT_ADMIN", "SUPER_ADMIN"] },
     ],
-    searchableFields: ["action", "entityType", "entityId", "actorId", "userAgent"],
-    columns: ["action", "entityType", "entityId", "actorId", "actorRole", "timestamp"],
+    searchableFields: ["action", "entityType", "entityId", "actorId", "actorName", "actorEmail", "userAgent"],
+    columns: ["action", "entityType", "entityId", "actorName", "actorEmail", "actorRole", "timestamp"],
   },
   {
     slug: "settings",

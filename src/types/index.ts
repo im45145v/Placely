@@ -272,6 +272,7 @@ export interface PlacementRound {
 }
 
 export type RoundOutcome = "PASSED" | "FAILED" | "WAITLISTED" | "SELECTED";
+export type InterviewScheduleStatus = "pending" | "scheduled" | "rescheduled" | "cancelled";
 
 export interface RoundParticipant {
   $id: string;
@@ -280,8 +281,13 @@ export interface RoundParticipant {
   studentId: string;
   scheduledStart?: string;
   scheduledEnd?: string;
+  slotLabel?: string;
+  room?: string;
   location?: string;
   meetingLink?: string;
+  scheduleTimezone?: string;
+  scheduleStatus: InterviewScheduleStatus;
+  cancellationReason?: string;
   instructions?: string;
   interviewerIds: string[];
   score?: number;
@@ -289,6 +295,7 @@ export interface RoundParticipant {
   notes?: string;
   resultPublished: boolean;
   publishedAt?: string;
+  lastScheduledAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -557,6 +564,8 @@ export interface AuditLog {
   action: string;
   entityType: string;
   entityId: string;
+  actorName?: string;
+  actorEmail?: string;
   previousValue?: Record<string, unknown>;
   newValue?: Record<string, unknown>;
   ipAddress?: string;

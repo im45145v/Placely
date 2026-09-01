@@ -2,6 +2,7 @@ import type { Models } from "node-appwrite";
 import { Query } from "node-appwrite";
 import { Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 import { getServerDatabases } from "@/lib/appwrite/server";
+import { createAuditLog } from "@/lib/audit/service";
 import { AppError, isNotFoundError } from "@/lib/errors";
 import type { AppUser, StudentProfile } from "@/types";
 import { listActiveVariablesForUniversity, validateVariableValues } from "@/lib/variables/service";
@@ -132,8 +133,22 @@ export async function updateStudentProfileForActor(
       updatedAt: nextProfile.updatedAt,
     }
   );
-
-  return toStudentProfileView(nextUser, docToStudentProfile(updatedProfileDoc, profile.$id), variableDefinitions);
+  const updatedProfile = docToStudentProfile(updatedProfileDoc, profile.$id);
+  const nextView = toStudentProfileView(nextUser, updatedProfile, variableDefinitions);
+  await createAuditLog(actor, {
+    action: isStudentSelf(actor, targetUserId) ? "student.profile_updated" : "student.profile_admin_updated",
+    entityType: "student_profile",
+    entityId: profile.$id,
+    previousValue: {
+      user: { name: user.name, updatedAt: user.updatedAt },
+      profile,
+    },
+    newValue: {
+      user: { name: nextUser.name, updatedAt: nextUser.updatedAt },
+      profile: updatedProfile,
+    },
+  });
+  return nextView;
 }
 
 async function readUser(userId: string): Promise<AppUser> {

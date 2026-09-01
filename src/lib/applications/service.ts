@@ -20,6 +20,7 @@ import type {
   ApplicationStatus,
   BulkOperation,
   Company,
+  InterviewScheduleStatus,
   PlacementRound,
   Role,
   RoundOutcome,
@@ -537,8 +538,13 @@ export async function updateRoundParticipantForAdmin(
   input: Partial<{
     scheduledStart: string;
     scheduledEnd: string;
+    slotLabel: string;
+    room: string;
     location: string;
     meetingLink: string;
+    scheduleTimezone: string;
+    scheduleStatus: InterviewScheduleStatus;
+    cancellationReason: string;
     instructions: string;
     interviewerIds: string[];
     score: number;
@@ -554,18 +560,37 @@ export async function updateRoundParticipantForAdmin(
   assertUniversityScope(actor, application.universityId);
   const now = new Date().toISOString();
   const { databases } = createServerServices();
+  const normalizedSchedule = normalizeScheduleInput(participant, input);
+
+  if (normalizedSchedule.hasSchedulingChange && normalizedSchedule.scheduledStart && normalizedSchedule.scheduledEnd) {
+    await assertNoScheduleClash(actor, {
+      participantId,
+      studentId: participant.studentId,
+      roundId: participant.roundId,
+      scheduledStart: normalizedSchedule.scheduledStart,
+      scheduledEnd: normalizedSchedule.scheduledEnd,
+      interviewerIds: normalizedSchedule.interviewerIds,
+      room: normalizedSchedule.room,
+      scheduleStatus: normalizedSchedule.scheduleStatus,
+    });
+  }
 
   await databases.updateDocument(
     DATABASE_ID,
     Collections.ROUND_PARTICIPANTS,
     participantId,
     {
-      ...(input.scheduledStart !== undefined ? { scheduledStart: cleanOptional(input.scheduledStart) ?? null } : {}),
-      ...(input.scheduledEnd !== undefined ? { scheduledEnd: cleanOptional(input.scheduledEnd) ?? null } : {}),
+      ...(input.scheduledStart !== undefined ? { scheduledStart: normalizedSchedule.scheduledStart ?? null } : {}),
+      ...(input.scheduledEnd !== undefined ? { scheduledEnd: normalizedSchedule.scheduledEnd ?? null } : {}),
+      ...(input.slotLabel !== undefined ? { slotLabel: normalizedSchedule.slotLabel ?? null } : {}),
+      ...(input.room !== undefined ? { room: normalizedSchedule.room ?? null } : {}),
       ...(input.location !== undefined ? { location: cleanOptional(input.location) ?? null } : {}),
       ...(input.meetingLink !== undefined ? { meetingLink: cleanOptional(input.meetingLink) ?? null } : {}),
+      ...(input.scheduleTimezone !== undefined ? { scheduleTimezone: normalizedSchedule.scheduleTimezone ?? null } : {}),
+      ...(input.scheduleStatus !== undefined ? { scheduleStatus: normalizedSchedule.scheduleStatus } : {}),
+      ...(input.cancellationReason !== undefined ? { cancellationReason: normalizedSchedule.cancellationReason ?? null } : {}),
       ...(input.instructions !== undefined ? { instructions: cleanOptional(input.instructions) ?? null } : {}),
-      ...(input.interviewerIds !== undefined ? { interviewerIds: input.interviewerIds.filter(Boolean) } : {}),
+      ...(input.interviewerIds !== undefined ? { interviewerIds: normalizedSchedule.interviewerIds } : {}),
       ...(input.score !== undefined ? { score: input.score } : {}),
       ...(input.notes !== undefined ? { notes: cleanOptional(input.notes) ?? null } : {}),
       ...(input.outcome !== undefined ? { passed: input.outcome === "PASSED" || input.outcome === "SELECTED" } : {}),
@@ -573,6 +598,7 @@ export async function updateRoundParticipantForAdmin(
         resultPublished: input.publishResult,
         publishedAt: input.publishResult ? now : null,
       } : {}),
+      ...(normalizedSchedule.hasSchedulingChange ? { lastScheduledAt: now } : {}),
       updatedAt: now,
     }
   );
@@ -597,11 +623,21 @@ export async function updateRoundParticipantForAdmin(
   const schedulingChanged =
     input.scheduledStart !== undefined ||
     input.scheduledEnd !== undefined ||
+    input.slotLabel !== undefined ||
+    input.room !== undefined ||
     input.location !== undefined ||
     input.meetingLink !== undefined ||
-    input.instructions !== undefined;
+    input.scheduleTimezone !== undefined ||
+    input.scheduleStatus !== undefined ||
+    input.cancellationReason !== undefined ||
+    input.instructions !== undefined ||
+    input.interviewerIds !== undefined;
   if (schedulingChanged) {
-    await dispatchRoundNotification(participant.roundId, participant.scheduledStart || participant.scheduledEnd ? "ROUND_UPDATED" : "ROUND_SCHEDULED", `participant-schedule:${participantId}:${now}`);
+    await dispatchRoundNotification(
+      participant.roundId,
+      participant.scheduledStart || participant.scheduledEnd ? "ROUND_UPDATED" : "ROUND_SCHEDULED",
+      `participant-schedule:${participantId}:${now}`
+    );
   }
   if (input.publishResult) {
     const detail = await getAdminApplicationDetail(actor, application.$id);
@@ -623,6 +659,109 @@ export async function updateRoundParticipantForAdmin(
   }
 
   return getAdminApplicationDetail(actor, application.$id);
+}
+
+export async function bulkScheduleRoundParticipantsForAdmin(
+  actor: AppUser,
+  roundId: string,
+  input: {
+    participantIds: string[];
+    slots: Array<{
+      scheduledStart: string;
+      scheduledEnd: string;
+      slotLabel?: string;
+      room?: string;
+      location?: string;
+      meetingLink?: string;
+      interviewerIds?: string[];
+      instructions?: string;
+      scheduleTimezone?: string;
+    }>;
+  }
+): Promise<ApplicationDetail[]> {
+  assertAdmin(actor);
+  const round = await readPlacementRound(roundId);
+  assertUniversityScope(actor, round.universityId);
+  if (input.participantIds.length === 0) {
+    throw AppError.validationError("At least one participant is required.");
+  }
+  if (input.slots.length < input.participantIds.length) {
+    throw AppError.validationError("Provide at least one time slot per participant.");
+  }
+
+  const participants = await Promise.all(input.participantIds.map((participantId) => readRoundParticipant(participantId)));
+  participants.forEach((participant) => {
+    if (participant.roundId !== roundId) {
+      throw AppError.validationError("Every participant must belong to the selected round.");
+    }
+  });
+
+  const plannedAssignments = participants.map((participant, index) => {
+    const slot = input.slots[index];
+    const normalized = normalizeScheduleInput(participant, {
+      scheduledStart: slot.scheduledStart,
+      scheduledEnd: slot.scheduledEnd,
+      slotLabel: slot.slotLabel,
+      room: slot.room,
+      location: slot.location,
+      meetingLink: slot.meetingLink,
+      interviewerIds: slot.interviewerIds,
+      instructions: slot.instructions,
+      scheduleTimezone: slot.scheduleTimezone,
+      scheduleStatus: participant.scheduledStart || participant.scheduledEnd ? "rescheduled" : "scheduled",
+    });
+    return { participant, normalized };
+  });
+
+  assertNoInPayloadClashes(plannedAssignments.map(({ participant, normalized }) => ({
+    participantId: participant.$id,
+    studentId: participant.studentId,
+    scheduledStart: normalized.scheduledStart,
+    scheduledEnd: normalized.scheduledEnd,
+    interviewerIds: normalized.interviewerIds,
+    room: normalized.room,
+    scheduleStatus: normalized.scheduleStatus,
+  })));
+
+  for (const assignment of plannedAssignments) {
+    await assertNoScheduleClash(actor, {
+      participantId: assignment.participant.$id,
+      studentId: assignment.participant.studentId,
+      roundId,
+      scheduledStart: assignment.normalized.scheduledStart,
+      scheduledEnd: assignment.normalized.scheduledEnd,
+      interviewerIds: assignment.normalized.interviewerIds,
+      room: assignment.normalized.room,
+      scheduleStatus: assignment.normalized.scheduleStatus,
+    });
+  }
+
+  const updated = await Promise.all(plannedAssignments.map(({ participant, normalized }) =>
+    updateRoundParticipantForAdmin(actor, participant.$id, {
+      scheduledStart: normalized.scheduledStart,
+      scheduledEnd: normalized.scheduledEnd,
+      slotLabel: normalized.slotLabel,
+      room: normalized.room,
+      location: normalized.location,
+      meetingLink: normalized.meetingLink,
+      interviewerIds: normalized.interviewerIds,
+      instructions: normalized.instructions,
+      scheduleTimezone: normalized.scheduleTimezone,
+      scheduleStatus: normalized.scheduleStatus,
+    })
+  ));
+
+  await createAuditLog(actor, {
+    action: "round.bulk_scheduled",
+    entityType: "placement_round",
+    entityId: roundId,
+    newValue: {
+      participantIds: input.participantIds,
+      slotCount: input.slots.length,
+    },
+  });
+
+  return updated;
 }
 
 export async function removeRoundParticipantForAdmin(actor: AppUser, participantId: string): Promise<ApplicationDetail> {
@@ -1194,8 +1333,13 @@ async function ensureRoundParticipant(roundId: string, application: Application)
       studentId: application.studentId,
       scheduledStart: null,
       scheduledEnd: null,
+      slotLabel: null,
+      room: null,
       location: null,
       meetingLink: null,
+      scheduleTimezone: null,
+      scheduleStatus: "pending",
+      cancellationReason: null,
       instructions: null,
       interviewerIds: [],
       score: null,
@@ -1203,6 +1347,7 @@ async function ensureRoundParticipant(roundId: string, application: Application)
       notes: null,
       resultPublished: false,
       publishedAt: null,
+      lastScheduledAt: null,
       createdAt: now,
       updatedAt: now,
     }
@@ -1365,8 +1510,13 @@ function docToRoundParticipant(doc: Models.DefaultDocument): RoundParticipant {
     studentId: String(doc.studentId),
     scheduledStart: cleanOptional(asOptionalString(doc.scheduledStart)),
     scheduledEnd: cleanOptional(asOptionalString(doc.scheduledEnd)),
+    slotLabel: cleanOptional(asOptionalString(doc.slotLabel)),
+    room: cleanOptional(asOptionalString(doc.room)),
     location: cleanOptional(asOptionalString(doc.location)),
     meetingLink: cleanOptional(asOptionalString(doc.meetingLink)),
+    scheduleTimezone: cleanOptional(asOptionalString(doc.scheduleTimezone)),
+    scheduleStatus: (doc.scheduleStatus as InterviewScheduleStatus | null) ?? "pending",
+    cancellationReason: cleanOptional(asOptionalString(doc.cancellationReason)),
     instructions: cleanOptional(asOptionalString(doc.instructions)),
     interviewerIds: Array.isArray(doc.interviewerIds) ? (doc.interviewerIds as string[]) : [],
     score: typeof doc.score === "number" ? doc.score : undefined,
@@ -1374,6 +1524,7 @@ function docToRoundParticipant(doc: Models.DefaultDocument): RoundParticipant {
     notes: cleanOptional(asOptionalString(doc.notes)),
     resultPublished: Boolean(doc.resultPublished),
     publishedAt: cleanOptional(asOptionalString(doc.publishedAt)),
+    lastScheduledAt: cleanOptional(asOptionalString(doc.lastScheduledAt)),
     createdAt: (doc.createdAt as string) ?? doc.$createdAt,
     updatedAt: (doc.updatedAt as string) ?? doc.$updatedAt,
   };
@@ -1413,6 +1564,8 @@ function buildApplicationWorkflow(
       state = "rejected";
     } else if (application.currentRoundId === round.$id || round.status === "active") {
       state = "active";
+    } else if (participant?.scheduleStatus === "cancelled") {
+      state = "completed";
     } else if (result?.outcome === "SELECTED" || (application.status === "SELECTED" && participant)) {
       state = "selected";
     } else if (participant || result) {
@@ -1502,6 +1655,177 @@ async function normalizeRoundSequences(actor: AppUser, roleId: string): Promise<
       updatedAt: now,
     });
   }));
+}
+
+function normalizeScheduleInput(
+  participant: RoundParticipant,
+  input: Partial<{
+    scheduledStart: string;
+    scheduledEnd: string;
+    slotLabel: string;
+    room: string;
+    location: string;
+    meetingLink: string;
+    scheduleTimezone: string;
+    scheduleStatus: InterviewScheduleStatus;
+    cancellationReason: string;
+    instructions: string;
+    interviewerIds: string[];
+  }>
+) {
+  const scheduledStart = input.scheduledStart !== undefined ? normalizeIsoDateTime(input.scheduledStart, "scheduledStart") : participant.scheduledStart;
+  const scheduledEnd = input.scheduledEnd !== undefined ? normalizeIsoDateTime(input.scheduledEnd, "scheduledEnd") : participant.scheduledEnd;
+  const slotLabel = input.slotLabel !== undefined ? cleanOptional(input.slotLabel) : participant.slotLabel;
+  const room = input.room !== undefined ? cleanOptional(input.room) : participant.room;
+  const location = input.location !== undefined ? cleanOptional(input.location) : participant.location;
+  const meetingLink = input.meetingLink !== undefined ? cleanOptional(input.meetingLink) : participant.meetingLink;
+  const instructions = input.instructions !== undefined ? cleanOptional(input.instructions) : participant.instructions;
+  const interviewerIds = input.interviewerIds !== undefined ? input.interviewerIds.map((item) => item.trim()).filter(Boolean) : participant.interviewerIds;
+  const scheduleTimezone = input.scheduleTimezone !== undefined ? cleanOptional(input.scheduleTimezone) : participant.scheduleTimezone;
+  const scheduleStatus = input.scheduleStatus ?? inferScheduleStatus(participant, scheduledStart, scheduledEnd);
+  const cancellationReason = input.cancellationReason !== undefined ? cleanOptional(input.cancellationReason) : participant.cancellationReason;
+  const hasSchedulingChange =
+    input.scheduledStart !== undefined ||
+    input.scheduledEnd !== undefined ||
+    input.slotLabel !== undefined ||
+    input.room !== undefined ||
+    input.location !== undefined ||
+    input.meetingLink !== undefined ||
+    input.scheduleTimezone !== undefined ||
+    input.scheduleStatus !== undefined ||
+    input.cancellationReason !== undefined ||
+    input.instructions !== undefined ||
+    input.interviewerIds !== undefined;
+
+  if ((scheduledStart && !scheduledEnd) || (!scheduledStart && scheduledEnd)) {
+    throw AppError.validationError("Both start and end time are required when scheduling an interview.");
+  }
+  if (scheduledStart && scheduledEnd && new Date(scheduledEnd).getTime() <= new Date(scheduledStart).getTime()) {
+    throw AppError.validationError("Interview end time must be after the start time.");
+  }
+  if (scheduleStatus === "cancelled" && !cancellationReason) {
+    throw AppError.validationError("Cancellation reason is required when cancelling an interview.");
+  }
+  if (scheduleStatus !== "cancelled" && cancellationReason && !input.cancellationReason) {
+    // preserve existing
+  }
+
+  return {
+    scheduledStart,
+    scheduledEnd,
+    slotLabel,
+    room,
+    location,
+    meetingLink,
+    instructions,
+    interviewerIds,
+    scheduleTimezone,
+    scheduleStatus,
+    cancellationReason,
+    hasSchedulingChange,
+  };
+}
+
+function inferScheduleStatus(
+  participant: RoundParticipant,
+  scheduledStart?: string,
+  scheduledEnd?: string
+): InterviewScheduleStatus {
+  if (!scheduledStart || !scheduledEnd) {
+    return participant.scheduleStatus ?? "pending";
+  }
+  return participant.scheduledStart || participant.scheduledEnd ? "rescheduled" : "scheduled";
+}
+
+function normalizeIsoDateTime(value: string, field: string): string | undefined {
+  const trimmed = cleanOptional(value);
+  if (!trimmed) return undefined;
+  const timestamp = Date.parse(trimmed);
+  if (Number.isNaN(timestamp)) {
+    throw AppError.validationError(`${field} must be a valid ISO date-time.`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
+async function assertNoScheduleClash(
+  actor: AppUser,
+  input: {
+    participantId: string;
+    studentId: string;
+    roundId: string;
+    scheduledStart?: string;
+    scheduledEnd?: string;
+    interviewerIds: string[];
+    room?: string;
+    scheduleStatus: InterviewScheduleStatus;
+  }
+): Promise<void> {
+  if (!input.scheduledStart || !input.scheduledEnd || input.scheduleStatus === "cancelled") {
+    return;
+  }
+  const { databases } = createServerServices();
+  const result = await databases.listDocuments<Models.DefaultDocument>(DATABASE_ID, Collections.ROUND_PARTICIPANTS, [Query.limit(500)]);
+  const currentStart = new Date(input.scheduledStart).getTime();
+  const currentEnd = new Date(input.scheduledEnd).getTime();
+
+  const overlaps = result.documents
+    .map(docToRoundParticipant)
+    .filter((participant) => participant.$id !== input.participantId && participant.scheduleStatus !== "cancelled")
+    .filter((participant) => {
+      const start = participant.scheduledStart ? new Date(participant.scheduledStart).getTime() : NaN;
+      const end = participant.scheduledEnd ? new Date(participant.scheduledEnd).getTime() : NaN;
+      return !Number.isNaN(start) && !Number.isNaN(end) && start < currentEnd && end > currentStart;
+    });
+
+  const studentConflict = overlaps.find((participant) => participant.studentId === input.studentId);
+  if (studentConflict) {
+    throw AppError.validationError("Student clash detected with another scheduled interview.");
+  }
+
+  const interviewerConflict = overlaps.find((participant) => participant.interviewerIds.some((id) => input.interviewerIds.includes(id)));
+  if (interviewerConflict) {
+    throw AppError.validationError("Interviewer clash detected with another scheduled interview.");
+  }
+
+  if (input.room) {
+    const roomConflict = overlaps.find((participant) => participant.room && participant.room === input.room);
+    if (roomConflict) {
+      throw AppError.validationError("Room clash detected with another scheduled interview.");
+    }
+  }
+}
+
+function assertNoInPayloadClashes(
+  assignments: Array<{
+    participantId: string;
+    studentId: string;
+    scheduledStart?: string;
+    scheduledEnd?: string;
+    interviewerIds: string[];
+    room?: string;
+    scheduleStatus: InterviewScheduleStatus;
+  }>
+): void {
+  const active = assignments.filter((item) => item.scheduledStart && item.scheduledEnd && item.scheduleStatus !== "cancelled");
+  for (let index = 0; index < active.length; index += 1) {
+    for (let otherIndex = index + 1; otherIndex < active.length; otherIndex += 1) {
+      const left = active[index];
+      const right = active[otherIndex];
+      const overlaps =
+        new Date(left.scheduledStart!).getTime() < new Date(right.scheduledEnd!).getTime() &&
+        new Date(left.scheduledEnd!).getTime() > new Date(right.scheduledStart!).getTime();
+      if (!overlaps) continue;
+      if (left.studentId === right.studentId) {
+        throw AppError.validationError("Bulk schedule contains overlapping time slots for the same student.");
+      }
+      if (left.interviewerIds.some((id) => right.interviewerIds.includes(id))) {
+        throw AppError.validationError("Bulk schedule contains overlapping interviewer assignments.");
+      }
+      if (left.room && right.room && left.room === right.room) {
+        throw AppError.validationError("Bulk schedule contains overlapping room assignments.");
+      }
+    }
+  }
 }
 
 async function createBulkOperation(

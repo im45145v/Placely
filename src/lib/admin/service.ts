@@ -6,6 +6,7 @@ import { listApplicationsForAdmin, listPlacementRoundsForAdmin } from "@/lib/app
 import { listVariablesForUniversity } from "@/lib/variables/service";
 import { listSubmittedResumesForAdmin } from "@/lib/resumes/service";
 import { listPlacementRulesForAdmin } from "@/lib/placement-rules/service";
+import { listAuditLogs } from "@/lib/audit/service";
 import { getAdminSection, type AdminSectionConfig } from "./registry";
 import type { AppUser } from "@/types";
 
@@ -114,6 +115,36 @@ export async function getAdminCollectionPage(
     throw new Error("Unknown admin collection section.");
   }
 
+  if (sectionSlug === "audit-logs") {
+    const records = (await listAuditLogs(actor, {
+      search: params.search,
+      actorId: params.filters?.actorId,
+      entityType: params.filters?.entityType,
+      entityId: params.filters?.entityId,
+      action: params.filters?.action,
+      dateFrom: params.filters?.dateFrom,
+      dateTo: params.filters?.dateTo,
+    })).map((log) => ({ id: log.$id, values: log as unknown as Record<string, unknown> }));
+
+    const page = Math.max(params.page ?? 1, 1);
+    const total = records.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const start = (Math.min(page, totalPages) - 1) * PAGE_SIZE;
+
+    return {
+      section,
+      records: records.slice(start, start + PAGE_SIZE),
+      columns: section.columns?.length ? section.columns : inferColumns(records[0]?.values ?? {}),
+      total,
+      totalPages,
+      page: Math.min(page, totalPages),
+      search: params.search?.trim() ?? "",
+      sort: params.sort || section.defaultSort || "timestamp",
+      direction: params.direction || section.defaultDirection || "desc",
+      filters: stripEmpty(params.filters ?? {}),
+    };
+  }
+
   const { databases } = createServerServices();
   const result = await databases.listDocuments<Models.DefaultDocument>(DATABASE_ID, section.collectionId, [
     Query.equal("universityId", actor.universityId),
@@ -181,6 +212,15 @@ function stripEmpty(filters: Record<string, string>): Record<string, string> {
 
 function matchesFilters(record: Record<string, unknown>, filters: Record<string, string>): boolean {
   return Object.entries(filters).every(([key, value]) => {
+    if (key === "dateFrom" || key === "dateTo") {
+      const timestamp = readPath(record, "timestamp");
+      if (typeof timestamp !== "string") {
+        return false;
+      }
+      const current = new Date(timestamp).getTime();
+      const boundary = new Date(value).getTime();
+      return key === "dateFrom" ? current >= boundary : current <= boundary;
+    }
     const current = readPath(record, key);
     if (Array.isArray(current)) {
       return current.some((item) => String(item) === value);

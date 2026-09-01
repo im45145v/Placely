@@ -1,6 +1,7 @@
 import { ID, Models, Query } from "node-appwrite";
 import { Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 import { getServerDatabases } from "@/lib/appwrite/server";
+import { createAuditLog } from "@/lib/audit/service";
 import { AppError } from "@/lib/errors";
 import type { AppUser, StudentProfile, VariableType } from "@/types";
 import { BUILT_IN_VARIABLES } from "./builtins";
@@ -49,8 +50,14 @@ export async function createVariableForAdmin(actor: AppUser, input: VariableDefi
       updatedAt: now,
     }
   );
-
-  return docToVariableDefinition(created);
+  const variable = docToVariableDefinition(created);
+  await createAuditLog(actor, {
+    action: "permission.created",
+    entityType: "variable_permission",
+    entityId: variable.$id,
+    newValue: variable as unknown as Record<string, unknown>,
+  });
+  return variable;
 }
 
 export async function updateVariableForAdmin(
@@ -79,8 +86,15 @@ export async function updateVariableForAdmin(
       updatedAt: new Date().toISOString(),
     }
   );
-
-  return docToVariableDefinition(updated);
+  const variable = docToVariableDefinition(updated);
+  await createAuditLog(actor, {
+    action: "permission.updated",
+    entityType: "variable_permission",
+    entityId: variableId,
+    previousValue: existing as unknown as Record<string, unknown>,
+    newValue: variable as unknown as Record<string, unknown>,
+  });
+  return variable;
 }
 
 export async function deleteVariableForAdmin(actor: AppUser, variableId: string): Promise<void> {
@@ -91,6 +105,12 @@ export async function deleteVariableForAdmin(actor: AppUser, variableId: string)
 
   const databases = getServerDatabases();
   await databases.deleteDocument(DATABASE_ID, Collections.VARIABLES, variableId);
+  await createAuditLog(actor, {
+    action: "permission.deleted",
+    entityType: "variable_permission",
+    entityId: variableId,
+    previousValue: existing as unknown as Record<string, unknown>,
+  });
 }
 
 export async function getVariableMapForUniversity(actor: AppUser, activeOnly = false): Promise<Map<string, VariableDefinition>> {

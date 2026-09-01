@@ -85,12 +85,19 @@ export function StudentApplicationDetailView({
                   <p className="mt-1 text-xs text-muted-foreground">{entry.round.type.replaceAll("_", " ")}</p>
                   <p className="mt-3 text-xs text-muted-foreground">
                     {entry.participant?.scheduledStart
-                      ? `Scheduled ${formatDate(entry.participant.scheduledStart, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                      ? `Scheduled ${formatDate(entry.participant.scheduledStart, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}${entry.participant.scheduledEnd ? ` to ${formatDate(entry.participant.scheduledEnd, { hour: "numeric", minute: "2-digit" })}` : ""}`
                       : entry.round.startTime
                         ? `Starts ${formatDate(entry.round.startTime, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
                         : "Schedule pending"}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">{entry.participant?.location ?? entry.round.location ?? entry.participant?.meetingLink ?? entry.round.meetingLink ?? "Location or link will appear here."}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {entry.participant?.scheduleStatus === "cancelled"
+                      ? `Interview cancelled${entry.participant.cancellationReason ? `: ${entry.participant.cancellationReason}` : ""}`
+                      : entry.participant?.room
+                        ? `Room ${entry.participant.room}`
+                        : entry.participant?.location ?? entry.round.location ?? entry.participant?.meetingLink ?? entry.round.meetingLink ?? "Location or link will appear here."}
+                  </p>
+                  {entry.participant?.scheduleTimezone ? <p className="mt-1 text-xs text-muted-foreground">Timezone: {entry.participant.scheduleTimezone}</p> : null}
                   <p className="mt-2 text-xs">{entry.participant?.instructions ?? entry.round.instructions ?? "No instructions published yet."}</p>
                   {entry.result?.publishedAt ? <p className="mt-2 text-xs font-medium">Published result: {entry.result.outcome}</p> : null}
                 </div>

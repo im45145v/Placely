@@ -68,7 +68,19 @@ export default async function GenericAdminSectionPage({
       page: Number(readParam(query.page) || "1"),
       sort: readParam(query.sort),
       direction: readDirection(readParam(query.direction)),
-      filters: Object.fromEntries((config.filterFields ?? []).map((field) => [field.key, readParam(query[field.key]) || ""])),
+      filters: {
+        ...Object.fromEntries((config.filterFields ?? []).map((field) => [field.key, readParam(query[field.key]) || ""])),
+        ...(section === "audit-logs"
+          ? {
+              actorId: readParam(query.actorId),
+              entityType: readParam(query.entityType),
+              entityId: readParam(query.entityId),
+              action: readParam(query.action),
+              dateFrom: readParam(query.dateFrom),
+              dateTo: readParam(query.dateTo),
+            }
+          : {}),
+      },
     });
   } catch (error) {
     loadError = error instanceof Error ? error.message : "An unexpected error occurred while reading this admin section.";
@@ -126,6 +138,16 @@ function AdminSectionFilters({
           ))}
         </select>
       ))}
+      {section.slug === "audit-logs" ? (
+        <>
+          <input name="actorId" defaultValue={readParam(query.actorId)} placeholder="Actor ID" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <input name="entityType" defaultValue={readParam(query.entityType)} placeholder="Entity type" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <input name="entityId" defaultValue={readParam(query.entityId)} placeholder="Entity ID" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <input name="action" defaultValue={readParam(query.action)} placeholder="Action" className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <input type="date" name="dateFrom" defaultValue={readParam(query.dateFrom)} className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          <input type="date" name="dateTo" defaultValue={readParam(query.dateTo)} className="rounded-md border border-input bg-background px-3 py-2 text-sm" />
+        </>
+      ) : null}
       <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Apply</button>
     </form>
   );
