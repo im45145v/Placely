@@ -26,7 +26,8 @@ const DEFAULT_UNIVERSITY_ID = "default";
  *
  * - If the document already exists, it is returned unchanged (role preserved).
  * - If the document does not exist, a new one is created with role = "student".
- * - If provisioning fails or the record cannot be loaded, auth fails closed.
+ * - Profile provisioning is best-effort so an incomplete optional profile
+ *   schema cannot reject a valid Appwrite authentication session.
  *
  * @param authUser - The verified Appwrite Auth user object.
  * @returns The AppUser profile (from DB or synthesised).
@@ -47,7 +48,7 @@ export async function syncUserRecord(
       authUser.$id
     );
     const user = docToAppUser(doc);
-    await ensureStudentProfile(databases, dbId, user);
+    await provisionStudentProfile(databases, dbId, user);
     return user;
   } catch (err) {
     if (isNotFoundError(err)) {
@@ -83,7 +84,7 @@ export async function syncUserRecord(
       data
     );
     const user = docToAppUser(doc);
-    await ensureStudentProfile(databases, dbId, user);
+    await provisionStudentProfile(databases, dbId, user);
     return user;
   } catch (createErr) {
     throw createErr;
@@ -167,6 +168,19 @@ async function ensureStudentProfile(
         updatedAt: now,
       }
     );
+  }
+}
+
+async function provisionStudentProfile(
+  databases: Databases,
+  dbId: string,
+  user: AppUser
+): Promise<void> {
+  try {
+    await ensureStudentProfile(databases, dbId, user);
+  } catch (error) {
+    // Authentication must remain available while profile schema changes roll out.
+    console.error("[auth/user-sync] Student profile provisioning failed:", error);
   }
 }
 
