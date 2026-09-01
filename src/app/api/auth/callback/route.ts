@@ -70,17 +70,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // 3. Sync / create the AppUser document
     const appUser = await syncUserRecord(authUser);
-    await createAuditLog(appUser, {
-      action: "auth.login_success",
-      entityType: "session",
-      entityId: authUser.$id,
-      ipAddress: request.headers.get("x-forwarded-for"),
-      userAgent: request.headers.get("user-agent"),
-      newValue: {
-        email: authUser.email,
-        sessionId: session.$id,
-      },
-    });
+    // Authentication must not fail if operational audit logging is unavailable.
+    try {
+      await createAuditLog(appUser, {
+        action: "auth.login_success",
+        entityType: "session",
+        entityId: authUser.$id,
+        ipAddress: request.headers.get("x-forwarded-for"),
+        userAgent: request.headers.get("user-agent"),
+        newValue: {
+          email: authUser.email,
+          sessionId: session.$id,
+        },
+      });
+    } catch (auditError) {
+      console.error("[auth/callback] Login audit logging failed:", auditError);
+    }
 
     // 3. Determine redirect destination based on role
     const destination = getRoleDestination(appUser.role);
