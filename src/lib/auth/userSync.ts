@@ -138,36 +138,10 @@ async function ensureStudentProfile(
       return;
     }
 
-    const now = new Date().toISOString();
-    await databases.createDocument(
-      dbId,
-      Collections.STUDENT_PROFILES,
-      user.$id,
-      {
-        userId: user.$id,
-        universityId: user.universityId,
-        personalInfo: {},
-        academic: {},
-        professional: {
-          previousCompanies: [],
-          previousTitles: [],
-          internships: [],
-          certifications: [],
-          skills: [],
-          projects: [],
-        },
-        placement: {
-          status: "NOT_PLACED",
-          numberOfOffers: 0,
-          placementHistory: [],
-          verifiedAcademicData: false,
-        },
-        customFields: {},
-        isProfileComplete: false,
-        createdAt: now,
-        updatedAt: now,
-      }
-    );
+    // Student profile storage is provisioned separately. The legacy Appwrite
+    // collection currently cannot store the structured profile fields safely.
+    // Do not create a partial profile during sign-in.
+    return;
   }
 }
 
