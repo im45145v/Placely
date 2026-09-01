@@ -10,8 +10,8 @@
  *
  * SERVER-SIDE ONLY — do not import from Client Components.
  */
-import { Databases, type Models } from "node-appwrite";
-import { createServerClient } from "@/lib/appwrite/server";
+import { type Databases, type Models } from "node-appwrite";
+import { getServerDatabases } from "@/lib/appwrite/server";
 import { Collections } from "@/lib/appwrite/constants";
 import type { AppUser, UserRole } from "@/types";
 import { isNotFoundError } from "@/lib/errors";
@@ -35,7 +35,7 @@ const DEFAULT_UNIVERSITY_ID = "default";
 export async function syncUserRecord(
   authUser: Models.User<Models.Preferences>
 ): Promise<AppUser> {
-  const databases = new Databases(createServerClient());
+  const databases = getServerDatabases();
   const env = getServerEnv();
   const dbId = env.APPWRITE_DATABASE_ID;
 
@@ -97,7 +97,7 @@ export async function syncUserRecord(
  * race or if DB is not provisioned).
  */
 export async function getAppUser(userId: string): Promise<AppUser | null> {
-  const databases = new Databases(createServerClient());
+  const databases = getServerDatabases();
   const dbId = getServerEnv().APPWRITE_DATABASE_ID;
 
   try {
@@ -138,10 +138,36 @@ async function ensureStudentProfile(
       return;
     }
 
-    // Student profile storage is provisioned separately. The legacy Appwrite
-    // collection currently cannot store the structured profile fields safely.
-    // Do not create a partial profile during sign-in.
-    return;
+    const now = new Date().toISOString();
+    await databases.createDocument(
+      dbId,
+      Collections.STUDENT_PROFILES,
+      user.$id,
+      {
+        userId: user.$id,
+        universityId: user.universityId,
+        personalInfo: {},
+        academic: {},
+        professional: {
+          previousCompanies: [],
+          previousTitles: [],
+          internships: [],
+          certifications: [],
+          skills: [],
+          projects: [],
+        },
+        placement: {
+          status: "NOT_PLACED",
+          numberOfOffers: 0,
+          placementHistory: [],
+          verifiedAcademicData: false,
+        },
+        customFields: {},
+        isProfileComplete: false,
+        createdAt: now,
+        updatedAt: now,
+      }
+    );
   }
 }
 

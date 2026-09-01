@@ -9,7 +9,83 @@
  */
 import { Client, Databases, Storage, Users, Functions } from "node-appwrite";
 import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "./constants";
+import { APPWRITE_DATABASE_SCHEMA } from "./schema";
 import { getServerEnv } from "@/lib/validation/env";
+
+const STRUCTURED_FIELDS = new Map(
+  APPWRITE_DATABASE_SCHEMA.collections.map((collection) => [
+    collection.id,
+    new Set(collection.fields.filter((field) => field.type === "json").map((field) => field.key)),
+  ])
+);
+
+function encodeStructuredData(collectionId: string, data: Record<string, unknown>): Record<string, unknown> {
+  const structuredFields = STRUCTURED_FIELDS.get(collectionId);
+  if (!structuredFields) return data;
+
+  return Object.fromEntries(Object.entries(data).map(([key, value]) => [
+    key,
+    structuredFields.has(key) && value !== null && typeof value !== "string"
+      ? JSON.stringify(value)
+      : value,
+  ]));
+}
+
+function decodeStructuredDocument<T>(collectionId: string, document: T): T {
+  if (!document || typeof document !== "object") return document;
+  const structuredFields = STRUCTURED_FIELDS.get(collectionId);
+  if (!structuredFields) return document;
+
+  const result = { ...(document as Record<string, unknown>) };
+  for (const key of structuredFields) {
+    const value = result[key];
+    if (typeof value !== "string") continue;
+    try {
+      result[key] = JSON.parse(value);
+    } catch {
+      // Preserve invalid historical values rather than turning a read into an outage.
+    }
+  }
+  return result as T;
+}
+
+/**
+ * Appwrite legacy Collections lack JSON attributes. This adapter keeps the
+ * application model stable by serializing declared JSON fields as strings.
+ */
+function createDatabases(client: Client): Databases {
+  const databases = new Databases(client);
+  return new Proxy(databases, {
+    get(target, property, receiver) {
+      if (property === "createDocument" || property === "updateDocument") {
+        return async (...args: unknown[]) => {
+          const collectionId = String(args[1]);
+          const dataIndex = 3;
+          args[dataIndex] = encodeStructuredData(collectionId, args[dataIndex] as Record<string, unknown>);
+          const result = await (target[property] as (...methodArgs: unknown[]) => Promise<unknown>)(...args);
+          return decodeStructuredDocument(collectionId, result);
+        };
+      }
+      if (property === "getDocument") {
+        return async (...args: unknown[]) => {
+          const result = await (target[property] as (...methodArgs: unknown[]) => Promise<unknown>)(...args);
+          return decodeStructuredDocument(String(args[1]), result);
+        };
+      }
+      if (property === "listDocuments") {
+        return async (...args: unknown[]) => {
+          const result = await (target[property] as (...methodArgs: unknown[]) => Promise<{ documents: unknown[] }>)(...args);
+          return {
+            ...result,
+            documents: result.documents.map((document) => decodeStructuredDocument(String(args[1]), document)),
+          };
+        };
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as Databases;
+}
 
 export function createServerClient(): Client {
   const env = getServerEnv();
@@ -41,7 +117,7 @@ export function createServerServices(
   client: Client = createServerClient()
 ): ServerServices {
   return {
-    databases: new Databases(client),
+    databases: createDatabases(client),
     storage: new Storage(client),
     users: new Users(client),
     functions: new Functions(client),
@@ -50,7 +126,7 @@ export function createServerServices(
 
 // Convenience single-service helpers for cases where only one service is needed.
 export function getServerDatabases(client?: Client): Databases {
-  return new Databases(client ?? createServerClient());
+  return createDatabases(client ?? createServerClient());
 }
 
 export function getServerStorage(client?: Client): Storage {
