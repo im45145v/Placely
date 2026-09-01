@@ -1,3 +1,5 @@
+import { getSafeUserMessage } from "@/lib/errors-user-message";
+
 /**
  * Application error types.
  * Provides structured, type-safe error handling across Placely.
@@ -62,14 +64,7 @@ export class AppError extends Error {
  * Strips internal details that should not be shown to users.
  */
 export function toUserMessage(error: unknown): string {
-  if (error instanceof AppError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    // Appwrite SDK errors expose a message field
-    return error.message || "An unexpected error occurred.";
-  }
-  return "An unexpected error occurred.";
+  return getSafeUserMessage(error);
 }
 
 /**

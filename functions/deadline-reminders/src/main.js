@@ -1,10 +1,12 @@
-import { Client, Databases, Functions, Query } from "node-appwrite";
+import { createHmac } from "node:crypto";
+import { Client, Databases, Functions, ID, Query } from "node-appwrite";
 
 const DATABASE_ID = process.env.APPWRITE_DATABASE_ID;
 const API_KEY = process.env.APPWRITE_API_KEY;
 const PROJECT_ID = process.env.APPWRITE_FUNCTION_PROJECT_ID ?? process.env.APPWRITE_PROJECT_ID;
 const ENDPOINT = process.env.APPWRITE_FUNCTION_API_ENDPOINT ?? "https://cloud.appwrite.io/v1";
 const NOTIFICATION_FUNCTION_ID = process.env.APPWRITE_NOTIFICATION_FUNCTION_ID;
+const FUNCTION_SHARED_SECRET = process.env.APPWRITE_FUNCTION_SHARED_SECRET?.trim() ?? "";
 
 const Collections = {
   ROLES: "roles",
@@ -13,7 +15,7 @@ const Collections = {
 };
 
 export default async function main({ res }) {
-  if (!DATABASE_ID || !API_KEY || !PROJECT_ID || !NOTIFICATION_FUNCTION_ID) {
+  if (!DATABASE_ID || !API_KEY || !PROJECT_ID || !NOTIFICATION_FUNCTION_ID || !FUNCTION_SHARED_SECRET) {
     return res.json({ ok: false, error: "Missing function environment variables." }, 500);
   }
 
@@ -40,7 +42,7 @@ export default async function main({ res }) {
       Query.limit(500),
     ]);
 
-    await functions.createExecution(NOTIFICATION_FUNCTION_ID, JSON.stringify({
+    await functions.createExecution(NOTIFICATION_FUNCTION_ID, JSON.stringify(signPayload({
       type: "DEADLINE_REMINDER",
       universityId: String(role.universityId),
       recipientUserIds: students.documents.map((doc) => doc.$id),
@@ -52,7 +54,7 @@ export default async function main({ res }) {
         role_name: String(role.title),
         deadline: String(role.applicationDeadline),
       },
-    }), true);
+    }, FUNCTION_SHARED_SECRET)), true);
     dispatched += 1;
   }
 
@@ -63,4 +65,21 @@ export default async function main({ res }) {
     rolesMatched: roles.documents.length,
     dispatches: dispatched,
   });
+}
+
+function createSignature({ payload, issuedAt, nonce, secret }) {
+  const hmac = createHmac("sha256", secret);
+  hmac.update(issuedAt);
+  hmac.update(":");
+  hmac.update(nonce);
+  hmac.update(":");
+  hmac.update(JSON.stringify(payload ?? null));
+  return hmac.digest("hex");
+}
+
+function signPayload(payload, secret) {
+  const issuedAt = new Date().toISOString();
+  const nonce = ID.unique();
+  const signature = createSignature({ payload, issuedAt, nonce, secret });
+  return { ...payload, issuedAt, nonce, signature };
 }

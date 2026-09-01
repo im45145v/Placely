@@ -16,6 +16,7 @@ import { Collections } from "@/lib/appwrite/constants";
 import type { AppUser, UserRole } from "@/types";
 import { isNotFoundError } from "@/lib/errors";
 import { USER_ROLES } from "./roles";
+import { getServerEnv } from "@/lib/validation/env";
 
 /** Default university ID until multi-university support is needed. */
 const DEFAULT_UNIVERSITY_ID = "default";
@@ -25,8 +26,7 @@ const DEFAULT_UNIVERSITY_ID = "default";
  *
  * - If the document already exists, it is returned unchanged (role preserved).
  * - If the document does not exist, a new one is created with role = "student".
- * - If the `users` collection does not yet exist (DB not provisioned), a
- *   minimal in-memory AppUser is returned so auth still works without a DB.
+ * - If provisioning fails or the record cannot be loaded, auth fails closed.
  *
  * @param authUser - The verified Appwrite Auth user object.
  * @returns The AppUser profile (from DB or synthesised).
@@ -35,7 +35,8 @@ export async function syncUserRecord(
   authUser: Models.User<Models.Preferences>
 ): Promise<AppUser> {
   const databases = new Databases(createServerClient());
-  const dbId = process.env.APPWRITE_DATABASE_ID ?? "";
+  const env = getServerEnv();
+  const dbId = env.APPWRITE_DATABASE_ID;
 
   // 1. Try to read the existing document by Appwrite Auth user ID.
   // We intentionally mirror the auth user ID as the document ID.
@@ -52,23 +53,22 @@ export async function syncUserRecord(
     if (isNotFoundError(err)) {
       // Document not found yet — fall through to create.
     } else {
-      // Unexpected read failure — keep auth usable during development.
-      console.warn(
-        "[syncUserRecord] Failed to read users document — using synthesised user",
-        err
-      );
-      return synthesiseAppUser(authUser);
+      throw err;
     }
   }
 
   // 2. Create new user document
   try {
     const now = new Date().toISOString();
+    const normalizedEmail = authUser.email.trim().toLowerCase();
+    const bootstrapSuperAdmins = env.APPWRITE_BOOTSTRAP_SUPER_ADMIN_EMAILS ?? [];
     const data: Omit<AppUser, "$id"> = {
       name: authUser.name,
-      email: authUser.email,
+      email: normalizedEmail,
       universityId: inferUniversityId(authUser.email),
-      role: USER_ROLES.STUDENT as UserRole,
+      role: bootstrapSuperAdmins.includes(normalizedEmail)
+        ? (USER_ROLES.SUPER_ADMIN as UserRole)
+        : (USER_ROLES.STUDENT as UserRole),
       isActive: true,
       onboardingCompletedAt: now,
       createdAt: now,
@@ -86,9 +86,7 @@ export async function syncUserRecord(
     await ensureStudentProfile(databases, dbId, user);
     return user;
   } catch (createErr) {
-    console.warn("[syncUserRecord] Failed to create user document:", createErr);
-    // Graceful degradation — return synthesised user so login still succeeds
-    return synthesiseAppUser(authUser);
+    throw createErr;
   }
 }
 
@@ -99,7 +97,7 @@ export async function syncUserRecord(
  */
 export async function getAppUser(userId: string): Promise<AppUser | null> {
   const databases = new Databases(createServerClient());
-  const dbId = process.env.APPWRITE_DATABASE_ID ?? "";
+  const dbId = getServerEnv().APPWRITE_DATABASE_ID;
 
   try {
     const doc = await databases.getDocument<Models.DefaultDocument>(dbId, Collections.USERS, userId);
@@ -108,10 +106,6 @@ export async function getAppUser(userId: string): Promise<AppUser | null> {
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function docToAppUser(doc: Models.DefaultDocument): AppUser {
   return {
@@ -124,23 +118,6 @@ function docToAppUser(doc: Models.DefaultDocument): AppUser {
     onboardingCompletedAt: doc["onboardingCompletedAt"] as string | undefined,
     createdAt: doc["createdAt"] as string ?? doc.$createdAt,
     updatedAt: doc["updatedAt"] as string ?? doc.$updatedAt,
-  };
-}
-
-function synthesiseAppUser(
-  authUser: Models.User<Models.Preferences>
-): AppUser {
-  const now = new Date().toISOString();
-  return {
-    $id: authUser.$id,
-    name: authUser.name,
-    email: authUser.email,
-    universityId: inferUniversityId(authUser.email),
-    role: USER_ROLES.STUDENT,
-    isActive: true,
-    onboardingCompletedAt: now,
-    createdAt: now,
-    updatedAt: now,
   };
 }
 

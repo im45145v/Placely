@@ -10,6 +10,7 @@
  */
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { Account } from "node-appwrite";
 import { OAuthProvider } from "node-appwrite";
@@ -17,7 +18,11 @@ import {
   APPWRITE_ENDPOINT,
   APPWRITE_PROJECT_ID,
 } from "@/lib/appwrite/constants";
-import { buildClearSessionCookieHeader } from "@/lib/auth/cookies";
+import {
+  OAUTH_STATE_COOKIE_MAX_AGE,
+  buildClearSessionCookieHeader,
+  getOAuthStateCookieName,
+} from "@/lib/auth/cookies";
 import { getServerSession } from "@/lib/auth/session";
 import { createSessionScopedClient } from "@/lib/auth/session";
 import { cookies } from "next/headers";
@@ -37,7 +42,17 @@ const APP_URL =
  * for an httpOnly session cookie server-side.
  */
 export async function buildGoogleLoginUrl(): Promise<string> {
-  const successUrl = `${APP_URL}/api/auth/callback`;
+  const state = randomUUID();
+  const cookieStore = await cookies();
+  cookieStore.set(getOAuthStateCookieName(), state, {
+    maxAge: OAUTH_STATE_COOKIE_MAX_AGE,
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+
+  const successUrl = `${APP_URL}/api/auth/callback?state=${encodeURIComponent(state)}`;
   const failureUrl = `${APP_URL}/login?error=oauth_failed`;
 
   // Build the OAuth2 token URL manually (no window object on the server)

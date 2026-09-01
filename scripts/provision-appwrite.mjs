@@ -90,9 +90,12 @@ async function ensureDatabase() {
 
 async function ensureCollection(id, name) {
   try {
-    await databases.getCollection(schema.databaseId, id);
+    const existing = await databases.getCollection(schema.databaseId, id);
+    if (!existing.documentSecurity || (existing.permissions ?? []).length > 0) {
+      await databases.updateCollection(schema.databaseId, id, name, [], true, true);
+    }
   } catch {
-    await databases.createCollection(schema.databaseId, id, name);
+    await databases.createCollection(schema.databaseId, id, name, [], true, true);
   }
 }
 

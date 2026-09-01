@@ -1,29 +1,56 @@
 # Appwrite Functions
 
-This directory contains Appwrite Functions used by Placely for server-side logic.
+This directory contains the Appwrite Functions currently used by Placely in production-oriented workflows.
 
-Each function is a separate subdirectory with its own `package.json` and entry point.
+Each function is deployed separately from its own subdirectory.
 
-Functions are deployed to Appwrite Cloud and invoked via HTTP or database event triggers.
+## Active functions
 
-## Functions (to be implemented in subsequent phases)
-
-| Function | Trigger | Phase |
+| Function | Purpose | Trigger |
 |---|---|---|
-| `evaluate-eligibility` | HTTP | 4 |
-| `create-application` | HTTP | 5 |
-| `withdraw-application` | HTTP | 5 |
-| `shortlist-students` | HTTP | 7 |
-| `advance-round` | HTTP | 6 |
-| `send-notification` | HTTP / Event | 8 |
-| `import-data` | HTTP | 7 |
-| `generate-export` | HTTP | 9 |
-| `audit-logger` | HTTP | 10 |
-| `verify-resume` | HTTP | 2 |
-| `publish-announcement` | HTTP | 8 |
+| `shortlisting-orchestrator` | Bulk shortlist, reject, move-to-round, and import-backed application workflows | HTTP execution from Placely |
+| `notification-dispatcher` | In-app notifications, email dispatch, template seeding, and retry handling | HTTP execution and optional event/scheduled execution |
+| `deadline-reminders` | Scheduled reminder runs for roles nearing application deadline | Scheduled execution |
+
+## Deployment layout
+
+- [`shortlisting-orchestrator`](./shortlisting-orchestrator/README.md)
+- [`notification-dispatcher`](./notification-dispatcher/README.md)
+- [`deadline-reminders`](./deadline-reminders/README.md)
+
+Create each function in Appwrite Cloud and configure its root directory to the matching folder under `functions/`.
+
+## Required shared environment variables
+
+Configure these on every function unless a function-specific README says otherwise:
+
+- `APPWRITE_API_KEY`
+- `APPWRITE_DATABASE_ID`
+- `APPWRITE_PROJECT_ID` or `APPWRITE_FUNCTION_PROJECT_ID`
+- `APPWRITE_FUNCTION_API_ENDPOINT` when the regional endpoint must be explicit
+- `APPWRITE_FUNCTION_SHARED_SECRET` for trusted internal function-to-function calls
+
+## Function-specific variables
+
+### `shortlisting-orchestrator`
+
+- `APPWRITE_NOTIFICATION_FUNCTION_ID` optional but recommended
+
+### `notification-dispatcher`
+
+- `EMAIL_AUTOMATION_PROVIDER`
+- `GOOGLE_APPS_SCRIPT_WEB_APP_URL` when `EMAIL_AUTOMATION_PROVIDER=google_apps_script`
+- `GOOGLE_APPS_SCRIPT_AUTH_TOKEN` when `EMAIL_AUTOMATION_PROVIDER=google_apps_script`
+
+### `deadline-reminders`
+
+- `APPWRITE_NOTIFICATION_FUNCTION_ID`
 
 ## Security
 
-All functions use server-side Appwrite API keys stored as function environment variables.
-Functions never trust client-supplied `role`, `universityId`, or eligibility values.
-Functions always re-fetch the calling user's profile to verify identity and role.
+- Use dedicated production API keys and separate non-production keys.
+- Keep all function secrets server-only.
+- Reuse the same `APPWRITE_FUNCTION_SHARED_SECRET` across trusted callers and callees.
+- Do not invoke these functions directly from untrusted clients without an additional auth layer.
+
+See [`DEPLOYMENT.md`](../DEPLOYMENT.md) for the full production deployment sequence.

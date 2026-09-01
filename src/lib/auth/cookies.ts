@@ -18,6 +18,7 @@ export function getSessionCookieName(): string {
 
 /** Cookie max-age: 30 days in seconds. */
 export const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
+export const OAUTH_STATE_COOKIE_MAX_AGE = 60 * 10;
 
 /**
  * Returns the Set-Cookie header value string for storing the session secret.
@@ -46,6 +47,40 @@ export function buildClearSessionCookieHeader(): string {
     process.env.NODE_ENV === "production" ? "; Secure" : "";
   return [
     `${getSessionCookieName()}=`,
+    "Max-Age=0",
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    secure,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+export function getOAuthStateCookieName(): string {
+  return `placely_oauth_state_${APPWRITE_PROJECT_ID || "dev"}`;
+}
+
+export function buildOAuthStateCookieHeader(state: string): string {
+  const secure =
+    process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return [
+    `${getOAuthStateCookieName()}=${encodeURIComponent(state)}`,
+    `Max-Age=${OAUTH_STATE_COOKIE_MAX_AGE}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    secure,
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+export function buildClearOAuthStateCookieHeader(): string {
+  const secure =
+    process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return [
+    `${getOAuthStateCookieName()}=`,
     "Max-Age=0",
     "Path=/",
     "HttpOnly",

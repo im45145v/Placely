@@ -22,8 +22,11 @@ import { createServerClient } from "@/lib/appwrite/server";
 import {
   buildSessionCookieHeader,
   buildClearSessionCookieHeader,
+  buildClearOAuthStateCookieHeader,
+  getOAuthStateCookieName,
 } from "@/lib/auth/cookies";
 import { createAuditLog } from "@/lib/audit/service";
+import { isValidOAuthState } from "@/lib/auth/oauth-state";
 import { getRoleDestination } from "@/lib/auth/roles";
 import { syncUserRecord } from "@/lib/auth/userSync";
 
@@ -34,13 +37,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
   const secret = searchParams.get("secret");
+  const state = searchParams.get("state");
+  const stateCookie = request.cookies.get(getOAuthStateCookieName())?.value;
 
   // Validate required parameters
-  if (!userId || !secret) {
-    console.error("[auth/callback] Missing userId or secret params");
-    return NextResponse.redirect(
+  if (!userId || !secret || !isValidOAuthState(stateCookie, state)) {
+    console.error("[auth/callback] Missing or invalid OAuth state");
+    const response = NextResponse.redirect(
       new URL("/login?error=oauth_failed", APP_URL)
     );
+    response.headers.append("Set-Cookie", buildClearOAuthStateCookieHeader());
+    response.headers.append("Set-Cookie", buildClearSessionCookieHeader());
+    return response;
   }
 
   try {
@@ -79,7 +87,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // 4. Build response with httpOnly session cookie
     const response = NextResponse.redirect(new URL(destination, APP_URL));
-    response.headers.set("Set-Cookie", buildSessionCookieHeader(sessionSecret));
+    response.headers.append("Set-Cookie", buildSessionCookieHeader(sessionSecret));
+    response.headers.append("Set-Cookie", buildClearOAuthStateCookieHeader());
 
     return response;
   } catch (err) {
@@ -89,7 +98,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const response = NextResponse.redirect(
       new URL("/login?error=auth_failed", APP_URL)
     );
-    response.headers.set("Set-Cookie", buildClearSessionCookieHeader());
+    response.headers.append("Set-Cookie", buildClearSessionCookieHeader());
+    response.headers.append("Set-Cookie", buildClearOAuthStateCookieHeader());
     return response;
   }
 }

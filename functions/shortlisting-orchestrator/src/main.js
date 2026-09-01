@@ -1,10 +1,13 @@
 import { Client, Databases, Functions, ID, Query } from "node-appwrite";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 const DATABASE_ID = process.env.APPWRITE_DATABASE_ID;
 const API_KEY = process.env.APPWRITE_API_KEY;
 const PROJECT_ID = process.env.APPWRITE_FUNCTION_PROJECT_ID ?? process.env.APPWRITE_PROJECT_ID;
 const ENDPOINT = process.env.APPWRITE_FUNCTION_API_ENDPOINT ?? "https://cloud.appwrite.io/v1";
 const NOTIFICATION_FUNCTION_ID = process.env.APPWRITE_NOTIFICATION_FUNCTION_ID;
+const FUNCTION_SHARED_SECRET = process.env.APPWRITE_FUNCTION_SHARED_SECRET?.trim() ?? "";
+const SIGNATURE_MAX_AGE_SECONDS = 300;
 
 const Collections = {
   APPLICATIONS: "applications",
@@ -19,11 +22,16 @@ const Collections = {
 };
 
 export default async function main({ req, res }) {
-  if (!DATABASE_ID || !API_KEY || !PROJECT_ID) {
+  if (!DATABASE_ID || !API_KEY || !PROJECT_ID || !FUNCTION_SHARED_SECRET) {
     return res.json({ ok: false, error: "Missing function environment variables." }, 500);
   }
 
   const body = safeJsonParse(req.body ?? "{}");
+  const verification = verifySignedPayload(body, FUNCTION_SHARED_SECRET);
+  if (!verification.ok) {
+    return res.json({ ok: false, error: verification.reason }, 401);
+  }
+  const payload = extractSignedPayload(body);
   const operationId = typeof body.operationId === "string" ? body.operationId : "";
   if (!operationId) {
     return res.json({ ok: false, error: "operationId is required." }, 400);
@@ -36,6 +44,14 @@ export default async function main({ req, res }) {
     : null;
   const notificationFunctions = notificationClient ? new Functions(notificationClient) : null;
   const operation = await databases.getDocument(DATABASE_ID, Collections.BULK_OPERATIONS, operationId);
+  if (
+    typeof payload.actorId !== "string" ||
+    typeof payload.universityId !== "string" ||
+    String(operation.actorId) !== payload.actorId ||
+    String(operation.universityId) !== payload.universityId
+  ) {
+    return res.json({ ok: false, error: "Execution payload does not match queued operation." }, 403);
+  }
 
   await databases.updateDocument(DATABASE_ID, Collections.BULK_OPERATIONS, operationId, {
     status: "running",
@@ -203,17 +219,19 @@ async function dispatchShortlistNotification(databases, notificationFunctions, a
   const studentUser = await databases.getDocument(DATABASE_ID, Collections.USERS, String(studentProfile.userId));
 
   await notificationFunctions.createExecution(NOTIFICATION_FUNCTION_ID, JSON.stringify({
-    type: "SHORTLISTED",
-    universityId: String(application.universityId),
-    recipientUserIds: [String(studentUser.$id)],
-    entityId: String(application.$id),
-    entityType: "application",
-    dedupeKey,
-    variables: {
-      student_name: String(studentUser.name ?? "Student"),
-      company_name: String(company.name ?? "Company"),
-      role_name: String(role.title ?? "Role"),
-    },
+    ...signPayload({
+      type: "SHORTLISTED",
+      universityId: String(application.universityId),
+      recipientUserIds: [String(studentUser.$id)],
+      entityId: String(application.$id),
+      entityType: "application",
+      dedupeKey,
+      variables: {
+        student_name: String(studentUser.name ?? "Student"),
+        company_name: String(company.name ?? "Company"),
+        role_name: String(role.title ?? "Role"),
+      },
+    }, FUNCTION_SHARED_SECRET),
   }), true);
 }
 
@@ -227,18 +245,20 @@ async function dispatchRoundNotification(databases, notificationFunctions, appli
   const studentUser = await databases.getDocument(DATABASE_ID, Collections.USERS, String(studentProfile.userId));
 
   await notificationFunctions.createExecution(NOTIFICATION_FUNCTION_ID, JSON.stringify({
-    type: "ROUND_SCHEDULED",
-    universityId: String(application.universityId),
-    recipientUserIds: [String(studentUser.$id)],
-    entityId: String(round.$id),
-    entityType: "placement_round",
-    dedupeKey,
-    variables: {
-      student_name: String(studentUser.name ?? "Student"),
-      company_name: String(company.name ?? "Company"),
-      role_name: String(role.title ?? "Role"),
-      round_name: String(round.name ?? "Current round"),
-    },
+    ...signPayload({
+      type: "ROUND_SCHEDULED",
+      universityId: String(application.universityId),
+      recipientUserIds: [String(studentUser.$id)],
+      entityId: String(round.$id),
+      entityType: "placement_round",
+      dedupeKey,
+      variables: {
+        student_name: String(studentUser.name ?? "Student"),
+        company_name: String(company.name ?? "Company"),
+        role_name: String(role.title ?? "Role"),
+        round_name: String(round.name ?? "Current round"),
+      },
+    }, FUNCTION_SHARED_SECRET),
   }), true);
 }
 
@@ -264,4 +284,65 @@ function safeJsonParse(value) {
   } catch {
     return {};
   }
+}
+
+function extractSignedPayload(body) {
+  const payload = { ...body };
+  delete payload.issuedAt;
+  delete payload.nonce;
+  delete payload.signature;
+  return payload;
+}
+
+function createSignature({ payload, issuedAt, nonce, secret }) {
+  const hmac = createHmac("sha256", secret);
+  hmac.update(issuedAt);
+  hmac.update(":");
+  hmac.update(nonce);
+  hmac.update(":");
+  hmac.update(JSON.stringify(payload ?? null));
+  return hmac.digest("hex");
+}
+
+function verifySignedPayload(body, secret) {
+  if (
+    typeof body.issuedAt !== "string" ||
+    typeof body.nonce !== "string" ||
+    typeof body.signature !== "string"
+  ) {
+    return { ok: false, reason: "Missing execution signature." };
+  }
+
+  const issuedAtMs = Date.parse(body.issuedAt);
+  if (Number.isNaN(issuedAtMs)) {
+    return { ok: false, reason: "Invalid execution timestamp." };
+  }
+
+  if (Math.abs(Date.now() - issuedAtMs) > SIGNATURE_MAX_AGE_SECONDS * 1000) {
+    return { ok: false, reason: "Execution signature expired." };
+  }
+
+  const expected = createSignature({
+    payload: extractSignedPayload(body),
+    issuedAt: body.issuedAt,
+    nonce: body.nonce,
+    secret,
+  });
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const providedBuffer = Buffer.from(body.signature, "utf8");
+  if (
+    expectedBuffer.length !== providedBuffer.length ||
+    !timingSafeEqual(expectedBuffer, providedBuffer)
+  ) {
+    return { ok: false, reason: "Invalid execution signature." };
+  }
+
+  return { ok: true };
+}
+
+function signPayload(payload, secret) {
+  const issuedAt = new Date().toISOString();
+  const nonce = ID.unique();
+  const signature = createSignature({ payload, issuedAt, nonce, secret });
+  return { ...payload, issuedAt, nonce, signature };
 }

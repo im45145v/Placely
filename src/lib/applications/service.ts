@@ -12,6 +12,7 @@ import { dispatchNotificationEvent } from "@/lib/notifications/service";
 import { evaluatePlacementRulesForApplication } from "@/lib/placement-rules/service";
 import { getStudentProfileForActor } from "@/lib/student-profile/service";
 import { getServerEnv } from "@/lib/validation/env";
+import { signFunctionPayload } from "@/lib/security/function-signing";
 import { buildVariableContextForUniversity, extractVariableValuesFromStudentProfile } from "@/lib/variables/service";
 import type { VariableDefinition } from "@/lib/variables/types";
 import type {
@@ -1902,19 +1903,34 @@ async function updateBulkOperation(
 }
 
 async function dispatchBulkOperation(actor: AppUser, operation: BulkOperation): Promise<void> {
-  const functionId = getServerEnv().APPWRITE_SHORTLISTING_FUNCTION_ID;
+  const {
+    APPWRITE_SHORTLISTING_FUNCTION_ID: functionId,
+    APPWRITE_FUNCTION_SHARED_SECRET: sharedSecret,
+  } = getServerEnv();
   if (!functionId) {
     await executeBulkOperation(actor, operation.$id);
     return;
   }
+  if (!sharedSecret) {
+    throw new Error("APPWRITE_FUNCTION_SHARED_SECRET is required when APPWRITE_SHORTLISTING_FUNCTION_ID is configured.");
+  }
 
   const { functions } = createServerServices();
   try {
-    await functions.createExecution(functionId, JSON.stringify({
-      operationId: operation.$id,
-      actorId: actor.$id,
-      universityId: actor.universityId,
-    }), true);
+    await functions.createExecution(
+      functionId,
+      JSON.stringify(
+        signFunctionPayload(
+          {
+            operationId: operation.$id,
+            actorId: actor.$id,
+            universityId: actor.universityId,
+          },
+          sharedSecret
+        )
+      ),
+      true
+    );
   } catch (error) {
     await updateBulkOperation(actor, operation.$id, {
       status: "failed",

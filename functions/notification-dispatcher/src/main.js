@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client, Databases, ID, Query } from "node-appwrite";
 
@@ -9,6 +9,8 @@ const ENDPOINT = process.env.APPWRITE_FUNCTION_API_ENDPOINT ?? "https://cloud.ap
 const EMAIL_AUTOMATION_PROVIDER = (process.env.EMAIL_AUTOMATION_PROVIDER ?? "log").trim().toLowerCase();
 const GOOGLE_APPS_SCRIPT_WEB_APP_URL = process.env.GOOGLE_APPS_SCRIPT_WEB_APP_URL?.trim() ?? "";
 const GOOGLE_APPS_SCRIPT_AUTH_TOKEN = process.env.GOOGLE_APPS_SCRIPT_AUTH_TOKEN?.trim() ?? "";
+const FUNCTION_SHARED_SECRET = process.env.APPWRITE_FUNCTION_SHARED_SECRET?.trim() ?? "";
+const SIGNATURE_MAX_AGE_SECONDS = 300;
 
 const MAX_EMAIL_ATTEMPTS = 5;
 const MAX_IMMEDIATE_RETRIES_PER_EXECUTION = 2;
@@ -41,56 +43,61 @@ const DEFAULT_TEMPLATES = [
 ];
 
 export default async function main({ req, res }) {
-  if (!DATABASE_ID || !API_KEY || !PROJECT_ID) {
+  if (!DATABASE_ID || !API_KEY || !PROJECT_ID || !FUNCTION_SHARED_SECRET) {
     return res.json({ ok: false, error: "Missing function environment variables." }, 500);
   }
 
   const client = new Client().setEndpoint(ENDPOINT).setProject(PROJECT_ID).setKey(API_KEY);
   const databases = new Databases(client);
   const body = safeJsonParse(req.body ?? "{}");
+  const verification = verifySignedPayload(body, FUNCTION_SHARED_SECRET);
+  if (!verification.ok) {
+    return res.json({ ok: false, error: verification.reason }, 401);
+  }
+  const payload = extractSignedPayload(body);
 
-  if (body.mode === "retry_due") {
+  if (payload.mode === "retry_due") {
     const retried = await processDueEmailDeliveries(databases);
     return res.json({ ok: true, mode: "retry_due", processed: retried.length, deliveries: retried });
   }
 
-  if (typeof body.type !== "string" || typeof body.universityId !== "string") {
+  if (typeof payload.type !== "string" || typeof payload.universityId !== "string") {
     return res.json({ ok: false, error: "type and universityId are required." }, 400);
   }
 
-  await ensureTemplates(databases, body.universityId);
-  const templates = await loadTemplates(databases, body.universityId);
-  const inApp = templates.find((template) => template.type === body.type && template.channel === "in_app" && template.isActive);
-  const email = templates.find((template) => template.type === body.type && template.channel === "email" && template.isActive);
+  await ensureTemplates(databases, payload.universityId);
+  const templates = await loadTemplates(databases, payload.universityId);
+  const inApp = templates.find((template) => template.type === payload.type && template.channel === "in_app" && template.isActive);
+  const email = templates.find((template) => template.type === payload.type && template.channel === "email" && template.isActive);
   if (!inApp && !email) {
     return res.json({ ok: true, created: 0, emailed: 0, skipped: "No active templates." });
   }
 
-  const recipients = await resolveRecipients(databases, body);
+  const recipients = await resolveRecipients(databases, payload);
   const emailSender = createEmailSender();
   let created = 0;
   let emailed = 0;
   const emailResults = [];
 
   for (const recipient of recipients) {
-    const variables = { ...body.variables, student_name: body.variables?.student_name ?? recipient.name };
-    const notificationDedupeKey = buildDedupeKey(body, recipient.$id, "in_app");
-    const emailDedupeKey = buildDedupeKey(body, recipient.$id, "email");
+    const variables = { ...payload.variables, student_name: payload.variables?.student_name ?? recipient.name };
+    const notificationDedupeKey = buildDedupeKey(payload, recipient.$id, "in_app");
+    const emailDedupeKey = buildDedupeKey(payload, recipient.$id, "email");
 
     if (inApp) {
       try {
         await databases.createDocument(DATABASE_ID, Collections.NOTIFICATIONS, ID.unique(), {
           userId: recipient.$id,
-          universityId: body.universityId,
-          type: body.type,
-          templateKey: body.templateKey ?? `${body.type}:in_app`,
+          universityId: payload.universityId,
+          type: payload.type,
+          templateKey: payload.templateKey ?? `${payload.type}:in_app`,
           dedupeKey: notificationDedupeKey,
           title: renderTemplate(inApp.titleTemplate, variables),
           body: renderTemplate(inApp.bodyTemplate, variables),
           data: {
-            ...(body.variables ?? {}),
-            entityId: body.entityId ?? null,
-            entityType: body.entityType ?? null,
+            ...(payload.variables ?? {}),
+            entityId: payload.entityId ?? null,
+            entityType: payload.entityType ?? null,
           },
           isRead: false,
           readAt: null,
@@ -112,19 +119,19 @@ export default async function main({ req, res }) {
     const delivery = await findOrCreateEmailDelivery(databases, {
       dedupeKey: emailDedupeKey,
       userId: recipient.$id,
-      universityId: body.universityId,
-      notificationType: body.type,
-      templateKey: body.templateKey ?? `${body.type}:email`,
+      universityId: payload.universityId,
+      notificationType: payload.type,
+      templateKey: payload.templateKey ?? `${payload.type}:email`,
       toEmail: recipient.email,
       subject: renderTemplate(email.subjectTemplate, variables),
       title: renderTemplate(email.titleTemplate, variables),
       body: renderTemplate(email.bodyTemplate, variables),
       payload: {
-        ...(body.variables ?? {}),
-        entityId: body.entityId ?? null,
-        entityType: body.entityType ?? null,
+        ...(payload.variables ?? {}),
+        entityId: payload.entityId ?? null,
+        entityType: payload.entityType ?? null,
         metadata: {
-          type: body.type,
+          type: payload.type,
           userId: recipient.$id,
           dedupeKey: emailDedupeKey,
         },
@@ -501,6 +508,60 @@ function safeJsonParse(value) {
   } catch {
     return {};
   }
+}
+
+function extractSignedPayload(body) {
+  const payload = { ...body };
+  delete payload.issuedAt;
+  delete payload.nonce;
+  delete payload.signature;
+  return payload;
+}
+
+function createSignature({ payload, issuedAt, nonce, secret }) {
+  const hmac = createHmac("sha256", secret);
+  hmac.update(issuedAt);
+  hmac.update(":");
+  hmac.update(nonce);
+  hmac.update(":");
+  hmac.update(JSON.stringify(payload ?? null));
+  return hmac.digest("hex");
+}
+
+function verifySignedPayload(body, secret) {
+  if (
+    typeof body.issuedAt !== "string" ||
+    typeof body.nonce !== "string" ||
+    typeof body.signature !== "string"
+  ) {
+    return { ok: false, reason: "Missing execution signature." };
+  }
+
+  const issuedAtMs = Date.parse(body.issuedAt);
+  if (Number.isNaN(issuedAtMs)) {
+    return { ok: false, reason: "Invalid execution timestamp." };
+  }
+
+  if (Math.abs(Date.now() - issuedAtMs) > SIGNATURE_MAX_AGE_SECONDS * 1000) {
+    return { ok: false, reason: "Execution signature expired." };
+  }
+
+  const expected = createSignature({
+    payload: extractSignedPayload(body),
+    issuedAt: body.issuedAt,
+    nonce: body.nonce,
+    secret,
+  });
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const providedBuffer = Buffer.from(body.signature, "utf8");
+  if (
+    expectedBuffer.length !== providedBuffer.length ||
+    !timingSafeEqual(expectedBuffer, providedBuffer)
+  ) {
+    return { ok: false, reason: "Invalid execution signature." };
+  }
+
+  return { ok: true };
 }
 
 function normalizeEmail(value) {

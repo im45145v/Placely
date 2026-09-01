@@ -5,6 +5,7 @@ import { getCollectionRealtimeChannel } from "@/lib/appwrite/realtime";
 import { createServerServices } from "@/lib/appwrite/server";
 import { AppError } from "@/lib/errors";
 import { requireStudentAccess } from "@/lib/auth/guards";
+import { signFunctionPayload } from "@/lib/security/function-signing";
 import { getServerEnv } from "@/lib/validation/env";
 import type { AppUser, Notification, NotificationTemplate, NotificationType } from "@/types";
 
@@ -249,10 +250,17 @@ export async function markAllNotificationsRead(actor: AppUser): Promise<{ update
 }
 
 export async function dispatchNotificationEvent(event: NotificationDispatchEvent): Promise<void> {
-  const functionId = getServerEnv().APPWRITE_NOTIFICATION_FUNCTION_ID;
+  const { APPWRITE_NOTIFICATION_FUNCTION_ID: functionId, APPWRITE_FUNCTION_SHARED_SECRET: sharedSecret } = getServerEnv();
   if (functionId) {
+    if (!sharedSecret) {
+      throw new Error("APPWRITE_FUNCTION_SHARED_SECRET is required when APPWRITE_NOTIFICATION_FUNCTION_ID is configured.");
+    }
     const { functions } = createServerServices();
-    await functions.createExecution(functionId, JSON.stringify(event), true);
+    await functions.createExecution(
+      functionId,
+      JSON.stringify(signFunctionPayload(event, sharedSecret)),
+      true
+    );
     return;
   }
 

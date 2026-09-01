@@ -19,6 +19,8 @@ export interface ServerEnv {
   APPWRITE_DATABASE_ID: string;
   APPWRITE_SHORTLISTING_FUNCTION_ID?: string;
   APPWRITE_NOTIFICATION_FUNCTION_ID?: string;
+  APPWRITE_FUNCTION_SHARED_SECRET?: string;
+  APPWRITE_BOOTSTRAP_SUPER_ADMIN_EMAILS?: string[];
   EMAIL_AUTOMATION_PROVIDER?: "google_apps_script" | "log";
   GOOGLE_APPS_SCRIPT_WEB_APP_URL?: string;
   GOOGLE_APPS_SCRIPT_AUTH_TOKEN?: string;
@@ -79,6 +81,10 @@ export function getServerEnv(): ServerEnv {
     ),
     APPWRITE_SHORTLISTING_FUNCTION_ID: process.env.APPWRITE_SHORTLISTING_FUNCTION_ID?.trim() || undefined,
     APPWRITE_NOTIFICATION_FUNCTION_ID: process.env.APPWRITE_NOTIFICATION_FUNCTION_ID?.trim() || undefined,
+    APPWRITE_FUNCTION_SHARED_SECRET: process.env.APPWRITE_FUNCTION_SHARED_SECRET?.trim() || undefined,
+    APPWRITE_BOOTSTRAP_SUPER_ADMIN_EMAILS: normalizeOptionalEmailList(
+      process.env.APPWRITE_BOOTSTRAP_SUPER_ADMIN_EMAILS
+    ),
     EMAIL_AUTOMATION_PROVIDER: normalizeOptionalProvider(process.env.EMAIL_AUTOMATION_PROVIDER),
     GOOGLE_APPS_SCRIPT_WEB_APP_URL: process.env.GOOGLE_APPS_SCRIPT_WEB_APP_URL?.trim() || undefined,
     GOOGLE_APPS_SCRIPT_AUTH_TOKEN: process.env.GOOGLE_APPS_SCRIPT_AUTH_TOKEN?.trim() || undefined,
@@ -94,4 +100,17 @@ function normalizeOptionalProvider(value: string | undefined): "google_apps_scri
     return normalized;
   }
   throw new Error("EMAIL_AUTOMATION_PROVIDER must be one of: google_apps_script, log.");
+}
+
+function normalizeOptionalEmailList(value: string | undefined): string[] | undefined {
+  const normalized = value
+    ?.split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!normalized || normalized.length === 0) {
+    return undefined;
+  }
+
+  return Array.from(new Set(normalized));
 }
