@@ -18,7 +18,7 @@ interface HeaderProps {
 }
 
 export function Header({
-  navItems = [],
+  navItems,
   userDisplayName,
   logo,
 }: HeaderProps): React.ReactElement {
@@ -27,18 +27,18 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <div className="flex h-16 items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-bold text-primary">
           {logo ?? (
-            <span className="text-xl font-bold tracking-tight">
+            <span className="text-lg font-bold tracking-tight">
               Place<span className="text-accent-foreground">ly</span>
             </span>
           )}
         </Link>
 
         {/* Desktop nav */}
-        {navItems.length > 0 && (
+        {navItems && navItems.length > 0 && (
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
             {navItems.map((item) => (
               <Link
@@ -58,16 +58,16 @@ export function Header({
           </nav>
         )}
 
-        {/* Right side */}
+        {/* Right side: user info and mobile menu */}
         <div className="flex items-center gap-3">
           {userDisplayName && (
-            <span className="hidden text-sm text-muted-foreground md:block">
+            <span className="text-sm text-muted-foreground">
               {userDisplayName}
             </span>
           )}
 
           {/* Mobile menu toggle */}
-          {navItems.length > 0 && (
+          {navItems && navItems.length > 0 && (
             <button
               className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent md:hidden"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -85,7 +85,7 @@ export function Header({
       </div>
 
       {/* Mobile menu */}
-      {mobileMenuOpen && navItems.length > 0 && (
+      {mobileMenuOpen && navItems && navItems.length > 0 && (
         <nav
           className="border-t border-border bg-background px-4 pb-4 md:hidden"
           aria-label="Mobile navigation"

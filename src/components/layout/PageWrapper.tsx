@@ -14,16 +14,14 @@ export function PageWrapper({
   className,
 }: PageWrapperProps): React.ReactElement {
   return (
-    <main
+    <div
       className={cn(
-        "flex-1 overflow-auto",
+        "w-full px-6 py-6 md:px-8",
         className
       )}
     >
-      <div className="container mx-auto px-4 py-6 md:px-6 lg:px-8">
-        {children}
-      </div>
-    </main>
+      {children}
+    </div>
   );
 }
 
@@ -44,13 +42,13 @@ export function PageHeader({
   className,
 }: PageHeaderProps): React.ReactElement {
   return (
-    <div className={cn("flex items-start justify-between gap-4 mb-6", className)}>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+    <div className={cn("flex items-start justify-between gap-4 mb-8", className)}>
+      <div className="flex-1">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       {action && <div className="shrink-0">{action}</div>}

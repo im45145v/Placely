@@ -5,6 +5,7 @@ import { requireStudentAccess } from "@/lib/auth/guards";
 import { ProfileForm } from "@/features/profile/ProfileForm";
 import { getResumeSummaryForActor } from "@/lib/resumes/service";
 import { ResumeManager } from "@/features/profile/ResumeManager";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 
 export const metadata: Metadata = {
   title: "My Profile",
@@ -18,11 +19,31 @@ export default async function StudentProfilePage() {
   return (
     <PageWrapper>
       <PageHeader
-        title="My profile"
-        description="Manage your identity, academic, professional, custom variable, and permitted placement settings."
+        title="Profile"
+        description="Build your placement profile to unlock opportunities."
       />
-      <ResumeManager initialSummary={resumes} />
-      <ProfileForm initialProfile={profile} />
+
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Resumes</CardTitle>
+            <CardDescription>Upload and manage your resume</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResumeManager initialSummary={resumes} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Personal & Academic</CardTitle>
+            <CardDescription>Your identity, education, and professional information</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ProfileForm initialProfile={profile} />
+          </CardContent>
+        </Card>
+      </div>
     </PageWrapper>
   );
 }
