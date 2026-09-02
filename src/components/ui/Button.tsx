@@ -17,8 +17,9 @@ export function Button({
   children,
   ...props
 }: ButtonProps): React.ReactElement {
+  const isDisabled = disabled || loading;
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+    "inline-flex touch-manipulation items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
 
   const variants = {
     primary:
@@ -41,14 +42,15 @@ export function Button({
 
   return (
     <button
-      disabled={disabled || loading}
-      aria-disabled={disabled || loading}
+      disabled={isDisabled}
+      aria-disabled={isDisabled}
+      aria-busy={loading || undefined}
       className={cn(base, variants[variant], sizes[size], className)}
       {...props}
     >
       {loading && (
         <svg
-          className="h-4 w-4 animate-spin"
+          className="h-4 w-4 animate-spin motion-reduce:animate-none"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"

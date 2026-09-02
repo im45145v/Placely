@@ -38,7 +38,7 @@ export function Sidebar({
           {title}
         </p>
       )}
-      <nav>
+      <nav aria-label={title ?? "Sidebar"}>
         <ul className="space-y-0.5">
           {items.map((item) => (
             <SidebarNavItem key={item.href} item={item} pathname={pathname} />
@@ -61,26 +61,29 @@ function SidebarNavItem({
   const [expanded, setExpanded] = useState(isActive);
 
   const hasChildren = item.children && item.children.length > 0;
+  const submenuId = getSubmenuId(item.href);
 
   if (hasChildren) {
     return (
       <li>
         <button
+          type="button"
           onClick={() => setExpanded((prev) => !prev)}
           className={cn(
-            "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+            "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             isActive
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           )}
           aria-expanded={expanded}
+          aria-controls={submenuId}
         >
           {item.icon && <span className="shrink-0">{item.icon}</span>}
           <span className="flex-1 text-left">{item.label}</span>
           <ChevronIcon expanded={expanded} />
         </button>
         {expanded && (
-          <ul className="ml-6 mt-0.5 space-y-0.5 border-l border-border pl-3">
+          <ul id={submenuId} className="ml-6 mt-0.5 space-y-0.5 border-l border-border pl-3">
             {item.children!.map((child) => (
               <li key={child.href}>
                 <Link
@@ -140,4 +143,8 @@ function ChevronIcon({ expanded }: { expanded: boolean }): React.ReactElement {
       <path d="m6 9 6 6 6-6" />
     </svg>
   );
+}
+
+function getSubmenuId(href: string): string {
+  return `sidebar-group-${href.replaceAll(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
 }

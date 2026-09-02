@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function AboutPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen flex-col items-center justify-center px-4 text-center">
       <div className="mx-auto max-w-xl space-y-4">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           About Placely
@@ -24,6 +24,6 @@ export default function AboutPage() {
           ← Back to home
         </Link>
       </div>
-    </div>
+    </main>
   );
 }

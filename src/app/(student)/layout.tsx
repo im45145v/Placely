@@ -38,7 +38,7 @@ export default async function StudentLayout({
         <ImportantAnnouncementsFeed initialAnnouncements={announcements} />
         <div className="flex flex-1 overflow-hidden">
           <StudentSidebar items={STUDENT_SIDEBAR_ITEMS} />
-          <main className="flex-1 overflow-auto">{children}</main>
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto">{children}</main>
         </div>
       </div>
     </AuthProvider>

@@ -33,7 +33,7 @@ export default async function AdminLayout({
           userDisplayName={`${appUser.name} (${appUser.role === USER_ROLES.SUPER_ADMIN ? "Super Admin" : "Admin"})`}
         />
         <ImportantAnnouncementsFeed initialAnnouncements={announcements} />
-        <main className="flex-1">{children}</main>
+        <main id="main-content" tabIndex={-1} className="flex-1">{children}</main>
       </div>
     </AuthProvider>
   );

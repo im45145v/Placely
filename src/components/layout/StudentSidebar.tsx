@@ -21,8 +21,8 @@ export function StudentSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 border-r border-border bg-background">
-      <nav className="flex flex-col gap-1 p-4">
+    <aside className="w-56 border-r border-border bg-background" aria-label="Student navigation">
+      <nav className="flex flex-col gap-1 p-4" aria-label="Student sidebar">
         {items.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`);

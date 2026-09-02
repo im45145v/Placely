@@ -27,6 +27,7 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background text-foreground">
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         {children}
       </body>
     </html>

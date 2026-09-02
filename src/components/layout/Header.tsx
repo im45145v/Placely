@@ -24,6 +24,7 @@ export function Header({
 }: HeaderProps): React.ReactElement {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+  const mobileNavigationId = "mobile-navigation";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -50,6 +51,7 @@ export function Header({
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
+                aria-current={pathname === item.href || pathname.startsWith(`${item.href}/`) ? "page" : undefined}
               >
                 {item.icon}
                 {item.label}
@@ -69,10 +71,12 @@ export function Header({
           {/* Mobile menu toggle */}
           {navItems && navItems.length > 0 && (
             <button
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent md:hidden"
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:hidden"
               onClick={() => setMobileMenuOpen((prev) => !prev)}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
+              aria-controls={mobileNavigationId}
             >
               {mobileMenuOpen ? (
                 <XIcon />
@@ -87,6 +91,7 @@ export function Header({
       {/* Mobile menu */}
       {mobileMenuOpen && navItems && navItems.length > 0 && (
         <nav
+          id={mobileNavigationId}
           className="border-t border-border bg-background px-4 pb-4 md:hidden"
           aria-label="Mobile navigation"
         >
@@ -102,6 +107,7 @@ export function Header({
                       ? "bg-accent text-accent-foreground"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
+                  aria-current={pathname === item.href || pathname.startsWith(`${item.href}/`) ? "page" : undefined}
                 >
                   {item.icon}
                   {item.label}

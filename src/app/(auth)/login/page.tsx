@@ -6,6 +6,7 @@
  * flow completes at `/api/auth/callback`.
  */
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LoginForm } from "@/features/auth/LoginForm";
 
 export const metadata: Metadata = {
@@ -23,7 +24,7 @@ export default function LoginPage({
   const error = params?.error;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen flex-col items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-8 shadow-sm">
         {/* Logo */}
         <div className="text-center">
@@ -37,7 +38,7 @@ export default function LoginPage({
 
         {/* Error banner */}
         {error && (
-          <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div role="alert" aria-live="polite" className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {errorMessage(error)}
           </div>
         )}
@@ -48,11 +49,16 @@ export default function LoginPage({
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground">
           By signing in you agree to our{" "}
-          <span className="underline">Terms of Service</span> and{" "}
-          <span className="underline">Privacy Policy</span>.
+          <Link href="/terms" className="underline hover:text-foreground">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="underline hover:text-foreground">
+            Privacy Policy
+          </Link>.
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 

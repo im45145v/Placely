@@ -57,7 +57,7 @@ export function ImportantAnnouncementsFeed({
   }
 
   return (
-    <section className="border-b border-amber-200 bg-amber-50 text-amber-950">
+    <section className="border-b border-amber-200 bg-amber-50 text-amber-950" aria-live="polite" aria-busy={isPending}>
       <div className="container mx-auto space-y-2 px-4 py-3">
         {announcements.map((announcement) => (
           <article key={announcement.$id} className="rounded-md border border-amber-200 bg-white/70 px-3 py-2">

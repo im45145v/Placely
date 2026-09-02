@@ -34,7 +34,7 @@ export function FilterInput({
     <input
       {...props}
       className={cn(
-        "rounded-md border border-input bg-background px-3 py-2 text-sm placeholder-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+        "rounded-md border border-input bg-background px-3 py-2 text-sm placeholder-muted-foreground focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
         className
       )}
     />
@@ -52,7 +52,7 @@ export function FilterSelect({
     <select
       {...props}
       className={cn(
-        "rounded-md border border-input bg-background px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+        "rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:border-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary",
         className
       )}
     >
@@ -76,7 +76,7 @@ export function FilterButton({
     <button
       {...props}
       className={cn(
-        "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        "touch-manipulation rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         variant === "primary"
           ? "bg-primary text-primary-foreground hover:bg-primary/90"
           : "border border-border bg-background text-foreground hover:bg-accent",

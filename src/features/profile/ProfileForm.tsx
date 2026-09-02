@@ -81,7 +81,14 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="h-3 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-3 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={completion}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Profile completeness"
+          >
             <div
               className="h-full rounded-full bg-primary transition-all"
               style={{ width: `${completion}%` }}
@@ -161,7 +168,11 @@ export function ProfileForm({ initialProfile }: ProfileFormProps) {
       ) : null}
 
       {(message || error) && (
-        <p className={error ? "text-sm text-destructive" : "text-sm text-foreground"}>
+        <p
+          role={error ? "alert" : "status"}
+          aria-live="polite"
+          className={error ? "text-sm text-destructive" : "text-sm text-foreground"}
+        >
           {error ?? message}
         </p>
       )}

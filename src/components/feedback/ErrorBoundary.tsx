@@ -72,8 +72,9 @@ function DefaultErrorFallback({
         <p className="mt-1 text-sm text-red-600">{message}</p>
       </div>
       <button
+        type="button"
         onClick={reset}
-        className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+        className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
       >
         Try again
       </button>
