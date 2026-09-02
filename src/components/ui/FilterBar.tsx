@@ -24,13 +24,9 @@ export function FilterBar({
   );
 }
 
-interface FilterInputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-}
+type FilterInputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 export function FilterInput({
-  label,
   className,
   ...props
 }: FilterInputProps): React.ReactElement {
@@ -45,13 +41,9 @@ export function FilterInput({
   );
 }
 
-interface FilterSelectProps
-  extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-}
+type FilterSelectProps = React.SelectHTMLAttributes<HTMLSelectElement>;
 
 export function FilterSelect({
-  label,
   className,
   children,
   ...props

@@ -12,9 +12,19 @@ import {
 } from "@/lib/eligibility/service";
 import { AppError, isNotFoundError } from "@/lib/errors";
 import { dispatchNotificationEvent } from "@/lib/notifications/service";
-import type { AppUser, Company, DocumentMetadata, EligibilityRuleSet, Role } from "@/types";
+import type {
+  AppUser,
+  Company,
+  DocumentMetadata,
+  EligibilityRuleSet,
+  Role,
+  RoleExplorerFacets,
+  RoleExplorerQuery,
+  RoleExplorerResult,
+} from "@/types";
 
 const PAGE_SIZE = 10;
+const ROLE_EXPLORER_SCAN_LIMIT = 250;
 const MAX_LOGO_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 const MAX_JD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_LOGO_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
@@ -30,12 +40,7 @@ export interface CompanyFilters {
   page?: number;
 }
 
-export interface RoleFilters {
-  search?: string;
-  status?: "draft" | "published" | "closed" | "cancelled" | "all";
-  companyId?: string;
-  page?: number;
-}
+export type RoleFilters = RoleExplorerQuery;
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -401,7 +406,14 @@ export async function listRolesForAdmin(
   filters: RoleFilters
 ): Promise<PaginatedResult<RoleDetail>> {
   assertAdmin(actor);
-  return listRoles(actor, filters, true);
+  const result = await listRoles(actor, filters, true);
+  return {
+    items: result.items,
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
+    totalPages: result.totalPages,
+  };
 }
 
 export async function listRolesForStudents(
@@ -411,7 +423,24 @@ export async function listRolesForStudents(
   if (actor.role !== USER_ROLES.STUDENT) {
     throw AppError.forbidden("Student access is required.");
   }
-  return listRoles(actor, filters, false);
+  const result = await listRoles(actor, filters, false);
+  return {
+    items: result.items,
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
+    totalPages: result.totalPages,
+  };
+}
+
+export async function listRoleExplorerForStudents(
+  actor: AppUser,
+  query: RoleExplorerQuery
+): Promise<RoleExplorerResult<RoleDetail>> {
+  if (actor.role !== USER_ROLES.STUDENT) {
+    throw AppError.forbidden("Student access is required.");
+  }
+  return listRoles(actor, query, false);
 }
 
 export async function getRoleDetailForAdmin(actor: AppUser, roleId: string): Promise<RoleDetail> {
@@ -468,15 +497,31 @@ async function listRoles(
   actor: AppUser,
   filters: RoleFilters,
   includeNonPublished: boolean
-): Promise<PaginatedResult<RoleDetail>> {
+): Promise<RoleExplorerResult<RoleDetail>> {
   const page = normalizePage(filters.page);
   const search = filters.search?.trim().toLowerCase();
   const status = filters.status ?? (includeNonPublished ? "all" : "published");
+  const sortBy = filters.sortBy ?? "deadline";
+  const sortDirection = filters.sortDirection ?? "asc";
   const { databases } = createServerServices();
+  const queries = [Query.equal("universityId", actor.universityId), Query.limit(ROLE_EXPLORER_SCAN_LIMIT)];
+  if (status !== "all") {
+    queries.push(Query.equal("status", status));
+  }
+  if (filters.companyId) {
+    queries.push(Query.equal("companyId", filters.companyId));
+  }
+  if (filters.workMode) {
+    queries.push(Query.equal("workMode", filters.workMode));
+  }
+  if (filters.employmentType) {
+    queries.push(Query.equal("employmentType", filters.employmentType));
+  }
+
   const result = await databases.listDocuments<Models.DefaultDocument>(
     DATABASE_ID,
     Collections.ROLES,
-    [Query.equal("universityId", actor.universityId), Query.limit(100)]
+    queries
   );
 
   let roles = result.documents.map(docToRole);
@@ -484,9 +529,6 @@ async function listRoles(
     roles = roles.filter((role) => role.status === "published");
   } else if (status !== "all") {
     roles = roles.filter((role) => role.status === status);
-  }
-  if (filters.companyId) {
-    roles = roles.filter((role) => role.companyId === filters.companyId);
   }
   if (search) {
     roles = roles.filter(
@@ -496,15 +538,26 @@ async function listRoles(
         role.requiredSkills.some((skill) => skill.toLowerCase().includes(search))
     );
   }
-  roles.sort((left, right) => {
-    const leftTime = left.applicationDeadline ? new Date(left.applicationDeadline).getTime() : Number.MAX_SAFE_INTEGER;
-    const rightTime = right.applicationDeadline ? new Date(right.applicationDeadline).getTime() : Number.MAX_SAFE_INTEGER;
-    return leftTime - rightTime;
-  });
+  const facets = buildRoleExplorerFacets(roles);
+  roles.sort((left, right) => compareRoles(left, right, sortBy, sortDirection));
 
   const paginated = paginate(roles, page);
   const items = await Promise.all(paginated.items.map(buildRoleDetail));
-  return { ...paginated, items };
+  return {
+    ...paginated,
+    items,
+    facets,
+    appliedQuery: {
+      search: filters.search?.trim() || undefined,
+      status,
+      companyId: filters.companyId,
+      workMode: filters.workMode,
+      employmentType: filters.employmentType,
+      sortBy,
+      sortDirection,
+      page,
+    },
+  };
 }
 
 async function buildCompanyDetail(company: Company, includeNonPublishedRoles: boolean): Promise<CompanyDetail> {
@@ -874,6 +927,67 @@ function paginate<T>(items: T[], page: number): PaginatedResult<T> {
     total,
     totalPages,
   };
+}
+
+function compareRoles(
+  left: Role,
+  right: Role,
+  sortBy: NonNullable<RoleExplorerQuery["sortBy"]>,
+  sortDirection: NonNullable<RoleExplorerQuery["sortDirection"]>
+): number {
+  const multiplier = sortDirection === "desc" ? -1 : 1;
+
+  if (sortBy === "recent") {
+    return (new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()) * multiplier;
+  }
+  if (sortBy === "ctc") {
+    const leftValue = left.ctc ?? Number.MIN_SAFE_INTEGER;
+    const rightValue = right.ctc ?? Number.MIN_SAFE_INTEGER;
+    return (leftValue - rightValue) * multiplier;
+  }
+
+  const leftDeadline = left.applicationDeadline
+    ? new Date(left.applicationDeadline).getTime()
+    : Number.MAX_SAFE_INTEGER;
+  const rightDeadline = right.applicationDeadline
+    ? new Date(right.applicationDeadline).getTime()
+    : Number.MAX_SAFE_INTEGER;
+  return (leftDeadline - rightDeadline) * multiplier;
+}
+
+function buildRoleExplorerFacets(roles: Role[]): RoleExplorerFacets {
+  const statusCounts = new Map<string, number>();
+  const companyCounts = new Map<string, number>();
+  const workModeCounts = new Map<string, number>();
+  const employmentTypeCounts = new Map<string, number>();
+
+  for (const role of roles) {
+    incrementFacet(statusCounts, role.status);
+    incrementFacet(companyCounts, role.companyId);
+    if (role.workMode) {
+      incrementFacet(workModeCounts, role.workMode);
+    }
+    if (role.employmentType) {
+      incrementFacet(employmentTypeCounts, role.employmentType);
+    }
+  }
+
+  return {
+    status: facetMapToValues(statusCounts),
+    company: facetMapToValues(companyCounts),
+    workMode: facetMapToValues(workModeCounts),
+    employmentType: facetMapToValues(employmentTypeCounts),
+  };
+}
+
+function incrementFacet(map: Map<string, number>, key: string): void {
+  map.set(key, (map.get(key) ?? 0) + 1);
+}
+
+function facetMapToValues(map: Map<string, number>): { value: string; count: number }[] {
+  return [...map.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([value, count]) => ({ value, count }));
 }
 
 function normalizePage(page?: number): number {

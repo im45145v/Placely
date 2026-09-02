@@ -190,6 +190,9 @@ export const APPWRITE_DATABASE_SCHEMA: {
     ], [
       index("role_university_status_deadline", "key", ["universityId", "status", "applicationDeadline"], "Role browsing and deadline ordering."),
       index("role_company_status", "key", ["companyId", "status"], "Company role management."),
+      index("role_university_status_created", "key", ["universityId", "status", "createdAt"], "Role explorer recency sorting."),
+      index("role_university_status_workmode", "key", ["universityId", "status", "workMode"], "Role explorer work mode filtering."),
+      index("role_university_status_emptype", "key", ["universityId", "status", "employmentType"], "Role explorer employment type filtering."),
     ], adminPermissions("Students may read only published and authorized roles.")),
     collection(Collections.ELIGIBILITY_RULES, "EligibilityRule", true, [
       relation("universityId", Collections.UNIVERSITIES, "many-to-one", true, "Owning university."),

@@ -32,9 +32,14 @@ async function loadSchema() {
   const output = ts.transpileModule(source.replace(/^import .*?;\n/gm, ""), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const module = { exports: {} };
-  new Function("exports", "module", "Collections", "DATABASE_ID", output)(module.exports, module, collections, databaseId);
-  return module.exports.APPWRITE_DATABASE_SCHEMA;
+  const appwriteModule = { exports: {} };
+  new Function("exports", "module", "Collections", "DATABASE_ID", output)(
+    appwriteModule.exports,
+    appwriteModule,
+    collections,
+    databaseId
+  );
+  return appwriteModule.exports.APPWRITE_DATABASE_SCHEMA;
 }
 
 async function ensureDatabase() {

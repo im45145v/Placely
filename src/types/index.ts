@@ -172,6 +172,43 @@ export interface Role {
   updatedAt: string;
 }
 
+export type RoleExplorerSortBy = "deadline" | "recent" | "ctc";
+export type RoleExplorerSortDirection = "asc" | "desc";
+
+export interface RoleExplorerQuery {
+  search?: string;
+  status?: RoleStatus | "all";
+  companyId?: string;
+  workMode?: WorkMode;
+  employmentType?: EmploymentType;
+  sortBy?: RoleExplorerSortBy;
+  sortDirection?: RoleExplorerSortDirection;
+  page?: number;
+}
+
+export interface RoleExplorerFacetValue {
+  value: string;
+  count: number;
+}
+
+export interface RoleExplorerFacets {
+  status: RoleExplorerFacetValue[];
+  company: RoleExplorerFacetValue[];
+  workMode: RoleExplorerFacetValue[];
+  employmentType: RoleExplorerFacetValue[];
+}
+
+export interface RoleExplorerResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  facets: RoleExplorerFacets;
+  appliedQuery: Required<Pick<RoleExplorerQuery, "status" | "sortBy" | "sortDirection">> &
+    Omit<RoleExplorerQuery, "status" | "sortBy" | "sortDirection">;
+}
+
 // ---------------------------------------------------------------------------
 // Application
 // ---------------------------------------------------------------------------
