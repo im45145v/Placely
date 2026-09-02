@@ -9,6 +9,14 @@ interface StudentRolesListProps {
   selectedRoleId?: string;
   page: number;
   totalPages: number;
+  queryParams: {
+    search: string;
+    companyId: string;
+    workMode: string;
+    employmentType: string;
+    sortBy: string;
+    sortDirection: string;
+  };
 }
 
 export function StudentRolesList({
@@ -16,6 +24,7 @@ export function StudentRolesList({
   selectedRoleId,
   page,
   totalPages,
+  queryParams,
 }: StudentRolesListProps): React.ReactElement {
   if (roles.length === 0) {
     return (
@@ -32,7 +41,7 @@ export function StudentRolesList({
         {roles.map((role) => (
           <Link
             key={role.$id}
-            href={`/roles?roleId=${role.$id}`}
+            href={buildRoleSelectionHref(role.$id, queryParams)}
             className={cn(
               "rounded-md border border-transparent p-3 text-left transition-colors",
               selectedRoleId === role.$id
@@ -66,4 +75,19 @@ export function StudentRolesList({
       </div>
     </>
   );
+}
+
+function buildRoleSelectionHref(
+  roleId: string,
+  queryParams: StudentRolesListProps["queryParams"]
+): string {
+  const params = new URLSearchParams();
+  params.set("roleId", roleId);
+  if (queryParams.search) params.set("search", queryParams.search);
+  if (queryParams.companyId) params.set("companyId", queryParams.companyId);
+  if (queryParams.workMode) params.set("workMode", queryParams.workMode);
+  if (queryParams.employmentType) params.set("employmentType", queryParams.employmentType);
+  if (queryParams.sortBy) params.set("sortBy", queryParams.sortBy);
+  if (queryParams.sortDirection) params.set("sortDirection", queryParams.sortDirection);
+  return `/roles?${params.toString()}`;
 }

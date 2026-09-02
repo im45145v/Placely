@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageWrapper, PageHeader } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
-import { listCompaniesForStudents, listRolesForStudents } from "@/lib/companies/service";
+import { listCompaniesForStudents, listRolesForStudents, type RoleDetail } from "@/lib/companies/service";
 import { formatCtc, formatDate } from "@/lib/utils";
 import { StudentRolesList } from "@/features/companies/StudentRolesList";
 import { StatusChip } from "@/components/ui/StatusChip";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import type { EmploymentType, WorkMode } from "@/types";
 
 export const metadata: Metadata = {
   title: "Job Profiles",
@@ -23,11 +24,24 @@ export default async function StudentRolesPage({
   const search = typeof params.search === "string" ? params.search : "";
   const status = "published";
   const companyId = typeof params.companyId === "string" ? params.companyId : "";
+  const workMode = parseWorkModeParam(params.workMode);
+  const employmentType = parseEmploymentTypeParam(params.employmentType);
+  const sortBy = parseSortByParam(params.sortBy);
+  const sortDirection = parseSortDirectionParam(params.sortDirection);
   const selectedRoleId = typeof params.roleId === "string" ? params.roleId : "";
   const page = typeof params.page === "string" ? Number(params.page) : 1;
 
   const [roles, companies] = await Promise.all([
-    listRolesForStudents(actor, { search, status, companyId: companyId || undefined, page }),
+    listRolesForStudents(actor, {
+      search,
+      status,
+      companyId: companyId || undefined,
+      workMode,
+      employmentType,
+      sortBy,
+      sortDirection,
+      page,
+    }),
     listCompaniesForStudents(actor, { search: "", status: "active", page: 1 }),
   ]);
 
@@ -61,13 +75,51 @@ export default async function StudentRolesPage({
               </option>
             ))}
           </select>
+          <select
+            name="workMode"
+            defaultValue={workMode ?? ""}
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">All work modes</option>
+            <option value="remote">Remote</option>
+            <option value="onsite">Onsite</option>
+            <option value="hybrid">Hybrid</option>
+          </select>
+          <select
+            name="employmentType"
+            defaultValue={employmentType ?? ""}
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">All employment types</option>
+            <option value="full_time">Full time</option>
+            <option value="part_time">Part time</option>
+            <option value="internship">Internship</option>
+            <option value="contract">Contract</option>
+          </select>
+          <select
+            name="sortBy"
+            defaultValue={sortBy}
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="deadline">Sort: Deadline</option>
+            <option value="recent">Sort: Recent</option>
+            <option value="ctc">Sort: CTC</option>
+          </select>
+          <select
+            name="sortDirection"
+            defaultValue={sortDirection}
+            className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
           <button
             type="submit"
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
           >
             Search
           </button>
-          {(search || companyId) && (
+          {(search || companyId || workMode || employmentType || sortBy !== "deadline" || sortDirection !== "asc") && (
             <Link
               href="/roles"
               className="text-xs text-primary underline"
@@ -86,6 +138,14 @@ export default async function StudentRolesPage({
             selectedRoleId={selectedRole?.$id}
             page={page}
             totalPages={roles.totalPages}
+            queryParams={{
+              search,
+              companyId,
+              workMode: workMode ?? "",
+              employmentType: employmentType ?? "",
+              sortBy,
+              sortDirection,
+            }}
           />
         </div>
 
@@ -105,7 +165,7 @@ export default async function StudentRolesPage({
   );
 }
 
-function StudentRoleDetailPanel({ role }: { role: any }) {
+function StudentRoleDetailPanel({ role }: { role: RoleDetail }) {
   return (
     <div className="space-y-6">
       <div>
@@ -191,4 +251,37 @@ function StudentRoleDetailPanel({ role }: { role: any }) {
       </Link>
     </div>
   );
+}
+
+function parseWorkModeParam(value: string | string[] | undefined): WorkMode | undefined {
+  if (value === "remote" || value === "onsite" || value === "hybrid") {
+    return value;
+  }
+  return undefined;
+}
+
+function parseEmploymentTypeParam(value: string | string[] | undefined): EmploymentType | undefined {
+  if (
+    value === "full_time" ||
+    value === "part_time" ||
+    value === "internship" ||
+    value === "contract"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function parseSortByParam(value: string | string[] | undefined): "deadline" | "recent" | "ctc" {
+  if (value === "recent" || value === "ctc") {
+    return value;
+  }
+  return "deadline";
+}
+
+function parseSortDirectionParam(value: string | string[] | undefined): "asc" | "desc" {
+  if (value === "desc") {
+    return value;
+  }
+  return "asc";
 }

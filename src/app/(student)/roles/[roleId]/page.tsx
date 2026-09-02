@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
-import { PageHeader, PageWrapper } from "@/components/layout/PageWrapper";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { PageWrapper } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { getRoleDetailForStudent } from "@/lib/companies/service";
 import { formatCtc, formatDate } from "@/lib/utils";
