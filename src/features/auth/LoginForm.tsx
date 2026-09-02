@@ -1,49 +1,24 @@
 /**
- * LoginForm — client component that initiates Google OAuth login.
+ * LoginForm — server-rendered OAuth entry point.
  *
- * Fetches the OAuth URL via server action and redirects the browser to it.
- * Keeps the actual OAuth URL generation server-side.
+ * Submits a normal browser navigation to the auth route so the Appwrite
+ * redirect chain stays reliable and lint-safe.
  */
-"use client";
-
-import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 export function LoginForm(): React.ReactElement {
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function handleGoogleLogin(): void {
-    setError(null);
-    try {
-      setIsPending(true);
-      window.location.href = "/api/auth/login";
-    } catch {
-      setIsPending(false);
-      setError("Failed to initiate sign-in. Please try again.");
-    }
-  }
-
   return (
-    <div className="space-y-4">
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-
+    <form action="/api/auth/login" method="get" className="space-y-4">
       <Button
-        type="button"
+        type="submit"
         variant="outline"
         size="lg"
         className="w-full gap-3"
-        loading={isPending}
-        onClick={handleGoogleLogin}
       >
-        {!isPending && (
           <GoogleIcon />
-        )}
         Continue with Google
       </Button>
-    </div>
+    </form>
   );
 }
 
