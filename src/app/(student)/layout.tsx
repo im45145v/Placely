@@ -34,11 +34,24 @@ export default async function StudentLayout({
   return (
     <AuthProvider user={appUser}>
       <div className="flex min-h-screen flex-col">
-        <Header userDisplayName={appUser.name} />
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+        >
+          Skip to main content
+        </a>
+        <Header
+          navItems={STUDENT_SIDEBAR_ITEMS}
+          showDesktopNav={false}
+          userDisplayName={appUser.name}
+          profileHref="/profile"
+        />
         <ImportantAnnouncementsFeed initialAnnouncements={announcements} />
         <div className="flex flex-1 overflow-hidden">
           <StudentSidebar items={STUDENT_SIDEBAR_ITEMS} />
-          <main className="flex-1 overflow-auto">{children}</main>
+          <main id="main-content" className="flex-1 overflow-auto focus:outline-none" tabIndex={-1}>
+            {children}
+          </main>
         </div>
       </div>
     </AuthProvider>

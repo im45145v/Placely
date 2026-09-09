@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { PageWrapper, PageHeader } from "@/components/layout/PageWrapper";
-import { LogoutButton } from "@/features/auth/LogoutButton";
 import { requireRoleAccess } from "@/lib/auth/guards";
 import { USER_ROLES } from "@/lib/auth/roles";
 import { getAdminAnalyticsReport, listAdminAnalyticsFilterOptions } from "@/lib/analytics/service";
@@ -46,7 +45,6 @@ export default async function AdminDashboardPage({
       <PageHeader
         title="Admin Dashboard"
         description="Placement analytics, cohort breakdowns, and resume verification workflow."
-        action={<LogoutButton />}
       />
       <AdminOverview summary={summary} />
       <div className="mt-6">

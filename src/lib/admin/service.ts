@@ -2,10 +2,8 @@ import { Models, Query } from "node-appwrite";
 import { createServerServices } from "@/lib/appwrite/server";
 import { DATABASE_ID } from "@/lib/appwrite/constants";
 import { listCompaniesForAdmin, listRolesForAdmin } from "@/lib/companies/service";
-import { listApplicationsForAdmin, listPlacementRoundsForAdmin } from "@/lib/applications/service";
-import { listVariablesForUniversity } from "@/lib/variables/service";
+import { listApplicationsForAdmin } from "@/lib/applications/service";
 import { listSubmittedResumesForAdmin } from "@/lib/resumes/service";
-import { listPlacementRulesForAdmin } from "@/lib/placement-rules/service";
 import { listAuditLogs } from "@/lib/audit/service";
 import { getAdminSection, type AdminSectionConfig } from "./registry";
 import type { AppUser } from "@/types";
@@ -33,70 +31,24 @@ export interface AdminCollectionPageData {
 
 export interface AdminDashboardSummary {
   metrics: Array<{ label: string; value: string; href: string }>;
-  sections: Array<{ slug: string; label: string; description: string; count?: number }>;
 }
 
 export async function getAdminDashboardSummary(actor: AppUser): Promise<AdminDashboardSummary> {
-  const [companies, roles, applications, rounds, variables, resumes, rules, counts] = await Promise.all([
+  const [companies, roles, applications, resumes] = await Promise.all([
     listCompaniesForAdmin(actor, { search: "", status: "all", page: 1 }),
     listRolesForAdmin(actor, { search: "", status: "all", page: 1 }),
     listApplicationsForAdmin(actor, { search: "", status: "all" as never, page: 1 }),
-    listPlacementRoundsForAdmin(actor),
-    listVariablesForUniversity(actor),
     listSubmittedResumesForAdmin(actor),
-    listPlacementRulesForAdmin(actor),
-    getAdminSectionCounts(actor),
   ]);
 
   return {
     metrics: [
+      { label: "Pending Resumes", value: String(resumes.length), href: "/admin/applications" },
+      { label: "Applications", value: String(applications.total), href: "/admin/applications" },
       { label: "Companies", value: String(companies.total), href: "/admin/companies" },
       { label: "Roles", value: String(roles.total), href: "/admin/roles" },
-      { label: "Applications", value: String(applications.total), href: "/admin/applications" },
-      { label: "Rounds", value: String(rounds.length), href: "/admin/rounds" },
-      { label: "Variables", value: String(variables.length), href: "/admin/variables" },
-      { label: "Pending Resumes", value: String(resumes.length), href: "/admin/dashboard" },
-      { label: "Placement Rules", value: String(rules.length), href: "/admin/eligibility" },
     ],
-    sections: counts,
   };
-}
-
-export async function getAdminSectionCounts(actor: AppUser): Promise<AdminDashboardSummary["sections"]> {
-  const sectionCounts = await Promise.all(
-    [
-      "students",
-      "companies",
-      "roles",
-      "applications",
-      "shortlists",
-      "rounds",
-      "results",
-      "eligibility",
-      "variables",
-      "notifications",
-      "announcements",
-      "analytics",
-      "reports",
-      "documents",
-      "audit-logs",
-      "settings",
-    ].map(async (slug) => {
-      const section = getAdminSection(slug);
-      if (!section) {
-        return null;
-      }
-      const count = section.collectionId ? await countUniversityCollection(actor, section.collectionId) : undefined;
-      return {
-        slug: section.slug,
-        label: section.label,
-        description: section.description,
-        count,
-      };
-    })
-  );
-
-  return sectionCounts.filter(Boolean) as AdminDashboardSummary["sections"];
 }
 
 export async function getAdminCollectionPage(
@@ -187,15 +139,6 @@ export async function getAdminCollectionPage(
     direction,
     filters,
   };
-}
-
-async function countUniversityCollection(actor: AppUser, collectionId: string): Promise<number> {
-  const { databases } = createServerServices();
-  const result = await databases.listDocuments<Models.DefaultDocument>(DATABASE_ID, collectionId, [
-    Query.equal("universityId", actor.universityId),
-    Query.limit(1),
-  ]);
-  return result.total;
 }
 
 function normalizeDocument(doc: Models.DefaultDocument): Record<string, unknown> {

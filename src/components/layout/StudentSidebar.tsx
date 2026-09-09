@@ -21,7 +21,7 @@ export function StudentSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 border-r border-border bg-background">
+    <aside className="hidden w-56 shrink-0 border-r border-border bg-background md:block" aria-label="Student navigation">
       <nav className="flex flex-col gap-1 p-4">
         {items.map((item) => {
           const isActive =
