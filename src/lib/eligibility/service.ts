@@ -5,7 +5,7 @@ import { calculateProfileCompletion } from "@/lib/student-profile/rules";
 import { createAuditLog } from "@/lib/audit/service";
 import type { AppUser, EligibilityRuleSet, StudentProfile } from "@/types";
 import { AppError } from "@/lib/errors";
-import { evaluateEligibilityRule, validateEligibilityRuleTree } from "./engine";
+import { evaluateEligibilityRule, evaluateEligibilityRuleDetailed, validateEligibilityRuleTree } from "./engine";
 import type {
   EligibilityResult,
   EligibilityPreviewResult,
@@ -84,11 +84,14 @@ export async function evaluateEligibilityResultForRole(
     throw AppError.notFound("Student profile not found for eligibility evaluation.");
   }
 
+  const detailed = evaluateEligibilityRuleDetailed(roleRule, student, { variables });
+
   return {
-    eligible: evaluateEligibilityRule(roleRule, student, { variables }),
+    eligible: detailed.satisfied,
     evaluatedAt: new Date().toISOString(),
     ruleSetId: await resolveRoleRuleSetId(input.roleId),
     studentProfileId: student.profileId,
+    items: detailed.items,
   };
 }
 

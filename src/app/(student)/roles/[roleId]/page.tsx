@@ -4,10 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { PageWrapper } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { getRoleDetailForStudent } from "@/lib/companies/service";
-import { evaluateEligibilityResultForRole } from "@/lib/eligibility/service";
+import { buildEligibilityChecklistForRole } from "@/lib/eligibility/checklist";
 import { getStudentProfileForActor } from "@/lib/student-profile/service";
 import { formatCtc, formatDate } from "@/lib/utils";
 import { StudentApplyButton } from "@/features/applications/StudentApplyButton";
+import { EligibilityChecklistPanel } from "@/features/applications/EligibilityChecklistPanel";
 import { DetailTabs } from "@/components/ui/DetailTabs";
 import { StatusChip } from "@/components/ui/StatusChip";
 
@@ -28,9 +29,10 @@ export default async function RoleDetailPage({
     getRoleDetailForStudent(actor, roleId),
     getStudentProfileForActor(actor),
   ]);
-  const eligibility = await evaluateEligibilityResultForRole(actor, {
+  const eligibility = await buildEligibilityChecklistForRole(actor, {
     roleId,
     studentProfileId: studentProfile.profile.profileId,
+    studentUserId: actor.$id,
   });
   const search = searchParams ? await searchParams : {};
   const activeTab = typeof search.tab === "string" ? search.tab : "overview";
@@ -78,7 +80,6 @@ export default async function RoleDetailPage({
                       Applications are now closed. You are not eligible to apply for this Job Profile.
                     </div>
                   )}
-
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">Description</h3>
                     <p className="mt-2 whitespace-pre-line text-sm text-foreground">
@@ -130,18 +131,12 @@ export default async function RoleDetailPage({
 
               {activeTab === "eligibility" && (
                 <div className="space-y-4">
-                  {!eligibility.eligible && (
-                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      You are not eligible for this Job Profile.
-                    </div>
-                  )}
+                  <EligibilityChecklistPanel checklist={eligibility} />
 
                   <div className="flex flex-col gap-3 text-sm text-foreground">
                     {role.eligibilityRuleSet?.description ? (
                       <p>{role.eligibilityRuleSet.description}</p>
-                    ) : (
-                      <p>Please review the eligibility criteria with your placement office.</p>
-                    )}
+                    ) : null}
 
                     {role.requiredQualifications?.length ? (
                       <ul className="list-inside list-disc space-y-1">

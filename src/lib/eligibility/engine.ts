@@ -1,6 +1,7 @@
 import type { ConditionNode, GroupNode, RuleNode } from "@/types";
 import { AppError } from "@/lib/errors";
 import type {
+  EligibilityCheckItem,
   EligibilityComparableValue,
   EligibilityEvaluationContext,
   EligibilityRuleValidationResult,
@@ -92,6 +93,91 @@ export function evaluateEligibilityRule(
     }
     return !evaluateNode(node.children[0]);
   }
+}
+
+const OPERATOR_LABELS: Record<string, string> = {
+  eq: "must equal",
+  neq: "must not equal",
+  gt: "must be greater than",
+  gte: "must be at least",
+  lt: "must be less than",
+  lte: "must be at most",
+  before: "must be before",
+  on_or_before: "must be on or before",
+  after: "must be after",
+  on_or_after: "must be on or after",
+  contains: "must include",
+  not_contains: "must not include",
+  in: "must be one of",
+  not_in: "must not be one of",
+};
+
+/**
+ * Same evaluation as `evaluateEligibilityRule`, but flattens every leaf
+ * condition into a human-readable pass/fail item for the student-facing
+ * eligibility checklist. Children are always evaluated (no short-circuiting)
+ * so every criterion shows up regardless of AND/OR outcome.
+ */
+export function evaluateEligibilityRuleDetailed(
+  ruleTree: RuleNode | null,
+  student: EligibilityStudentRecord,
+  context: EligibilityEvaluationContext
+): { satisfied: boolean; items: EligibilityCheckItem[] } {
+  const validation = validateEligibilityRuleTree(ruleTree, context);
+  if (!validation.valid) {
+    throw AppError.validationError(validation.errors.join("; "));
+  }
+
+  const items: EligibilityCheckItem[] = [];
+  if (!ruleTree) {
+    return { satisfied: true, items };
+  }
+
+  const satisfied = evaluateNode(ruleTree);
+  return { satisfied, items };
+
+  function evaluateNode(node: RuleNode): boolean {
+    if (node.type === "condition") {
+      const result = evaluateCondition(node, student, context);
+      items.push({
+        key: `${node.variable}-${items.length}`,
+        label: describeCondition(node, student, context),
+        satisfied: result,
+      });
+      return result;
+    }
+
+    const results = node.children.map(evaluateNode);
+    if (node.logic === "AND") {
+      return results.every(Boolean);
+    }
+    if (node.logic === "OR") {
+      return results.some(Boolean);
+    }
+    return !results[0];
+  }
+}
+
+function describeCondition(
+  node: ConditionNode,
+  student: EligibilityStudentRecord,
+  context: EligibilityEvaluationContext
+): string {
+  const variable = context.variables.get(node.variable);
+  const label = variable?.label ?? node.variable;
+  const operatorLabel = OPERATOR_LABELS[node.operator] ?? node.operator;
+  const actualValue = student.values[node.variable];
+  return `${label} ${operatorLabel} ${formatEligibilityValue(node.value)} (actual: ${formatEligibilityValue(actualValue)})`;
+}
+
+function formatEligibilityValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(String).join(", ") : "none";
+  }
+  if (value === null || value === undefined || value === "") {
+    return "not set";
+  }
+  return String(value);
 }
 
 function evaluateCondition(

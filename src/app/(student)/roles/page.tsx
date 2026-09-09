@@ -3,10 +3,11 @@ import Link from "next/link";
 import { PageWrapper, PageHeader } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { listCompaniesForStudents, listRolesForStudents, type RoleDetail } from "@/lib/companies/service";
-import { evaluateEligibilityResultForRole } from "@/lib/eligibility/service";
+import { buildEligibilityChecklistForRole, type EligibilityChecklist } from "@/lib/eligibility/checklist";
 import { getStudentProfileForActor } from "@/lib/student-profile/service";
 import { formatCtc, formatDate } from "@/lib/utils";
 import { StudentRolesList } from "@/features/companies/StudentRolesList";
+import { EligibilityChecklistPanel } from "@/features/applications/EligibilityChecklistPanel";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -53,9 +54,10 @@ export default async function StudentRolesPage({
     : roles.items[0];
 
   const selectedRoleEligibility = selectedRole
-    ? await evaluateEligibilityResultForRole(actor, {
+    ? await buildEligibilityChecklistForRole(actor, {
         roleId: selectedRole.$id,
         studentProfileId: studentProfile.profile.profileId,
+        studentUserId: actor.$id,
       })
     : null;
 
@@ -180,7 +182,7 @@ function StudentRoleDetailPanel({
   eligibility,
 }: {
   role: RoleDetail;
-  eligibility?: { eligible: boolean } | null;
+  eligibility?: EligibilityChecklist | null;
 }) {
   const isEligible = eligibility?.eligible ?? true;
 
@@ -204,6 +206,17 @@ function StudentRoleDetailPanel({
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           Applications are now closed. You are not eligible to apply for this Job Profile.
         </div>
+      )}
+
+      {eligibility && eligibility.groups.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Eligibility Criteria</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <EligibilityChecklistPanel checklist={eligibility} />
+          </CardContent>
+        </Card>
       )}
 
       <Card>
@@ -270,7 +283,7 @@ function StudentRoleDetailPanel({
       {(role.requiredQualifications?.length || role.eligibilityRuleSet?.description) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Eligibility Criteria</CardTitle>
+            <CardTitle className="text-lg">Job Description Notes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {role.eligibilityRuleSet?.description && (

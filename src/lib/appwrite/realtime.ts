@@ -1,5 +1,3 @@
-"use client";
-
 import { Collections, DATABASE_ID } from "@/lib/appwrite/constants";
 
 export function getCollectionRealtimeChannel(collectionId: string): string {

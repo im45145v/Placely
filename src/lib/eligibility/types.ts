@@ -45,6 +45,13 @@ export interface EligibilityResult {
   evaluatedAt: string;
   ruleSetId?: string;
   studentProfileId: string;
+  items: EligibilityCheckItem[];
+}
+
+export interface EligibilityCheckItem {
+  key: string;
+  label: string;
+  satisfied: boolean;
 }
 
 export type EligibilityRuleDraft = Pick<EligibilityRuleSet, "name" | "description" | "ruleTree">;

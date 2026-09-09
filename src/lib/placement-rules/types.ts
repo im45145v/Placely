@@ -52,9 +52,19 @@ export interface PlacementRuleViolation {
   details?: Record<string, unknown>;
 }
 
+export interface PlacementRuleCheck {
+  ruleId: string;
+  ruleName: string;
+  ruleType: PlacementRuleType;
+  satisfied: boolean;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
 export interface PlacementRuleEvaluationResult {
   allowed: boolean;
   violations: PlacementRuleViolation[];
+  checks: PlacementRuleCheck[];
 }
 
 export interface PlacementRuleContext {

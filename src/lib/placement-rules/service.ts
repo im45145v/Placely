@@ -11,6 +11,7 @@ import type {
   MaxApplicationsPerCompanyConfig,
   MaxApplicationsPerStudentConfig,
   OfferBasedRestrictionConfig,
+  PlacementRuleCheck,
   PlacementRuleContext,
   PlacementRuleEvaluationResult,
   PlacementRuleInput,
@@ -63,7 +64,7 @@ export async function evaluatePlacementRulesForApplication(
     role,
   };
 
-  const violations = rules.flatMap((rule) =>
+  const checks = rules.flatMap((rule) =>
     evaluateRule(rule, {
       applications,
       rounds,
@@ -72,10 +73,12 @@ export async function evaluatePlacementRulesForApplication(
       context,
     })
   );
+  const violations = checks.filter((item) => !item.satisfied).map(checkToViolation);
 
   return {
     allowed: violations.length === 0,
     violations,
+    checks,
   };
 }
 
@@ -191,7 +194,7 @@ function evaluateRule(
     studentProfile: Awaited<ReturnType<typeof getStudentProfileForActor>>;
     context: PlacementRuleContext;
   }
-): PlacementRuleViolation[] {
+): PlacementRuleCheck[] {
   switch (rule.ruleType) {
     case "max_applications_per_student":
       return evaluateMaxApplicationsPerStudent(rule, input.applications);
@@ -214,15 +217,12 @@ function evaluateRule(
   }
 }
 
-function evaluateMaxApplicationsPerStudent(rule: PlacementRule, applications: Application[]): PlacementRuleViolation[] {
+function evaluateMaxApplicationsPerStudent(rule: PlacementRule, applications: Application[]): PlacementRuleCheck[] {
   const config = normalizeMaxApplicationsPerStudentConfig(rule.config);
   const statuses = config.statuses ?? NON_WITHDRAWN_STATUSES;
   const count = applications.filter((item) => statuses.includes(item.status)).length;
-  if (count < config.maxApplications) {
-    return [];
-  }
   return [
-    violation(rule, `Student has reached the maximum of ${config.maxApplications} applications.`, {
+    check(rule, count < config.maxApplications, `Maximum of ${config.maxApplications} applications allowed, currently has ${count} applications.`, {
       currentCount: count,
       maxApplications: config.maxApplications,
       statuses,
@@ -234,117 +234,144 @@ function evaluateMaxApplicationsPerCompany(
   rule: PlacementRule,
   applications: Application[],
   targetCompanyId: string
-): PlacementRuleViolation[] {
+): PlacementRuleCheck[] {
   const config = normalizeMaxApplicationsPerCompanyConfig(rule.config);
   const statuses = config.statuses ?? ACTIVE_APPLICATION_STATUSES;
   const count = applications.filter(
     (item) => item.companyId === targetCompanyId && statuses.includes(item.status)
   ).length;
-  if (count < config.maxApplications) {
-    return [];
-  }
   return [
-    violation(rule, `Student has reached the maximum of ${config.maxApplications} applications for this company.`, {
-      currentCount: count,
-      maxApplications: config.maxApplications,
-      statuses,
-      companyId: targetCompanyId,
-    }),
+    check(
+      rule,
+      count < config.maxApplications,
+      `Maximum of ${config.maxApplications} applications allowed for this company, currently has ${count} applications.`,
+      { currentCount: count, maxApplications: config.maxApplications, statuses, companyId: targetCompanyId }
+    ),
   ];
 }
 
-function evaluateMaxActiveApplications(rule: PlacementRule, applications: Application[]): PlacementRuleViolation[] {
+function evaluateMaxActiveApplications(rule: PlacementRule, applications: Application[]): PlacementRuleCheck[] {
   const config = normalizeMaxActiveApplicationsConfig(rule.config);
   const count = applications.filter((item) => ACTIVE_APPLICATION_STATUSES.includes(item.status)).length;
-  if (count < config.maxActiveApplications) {
-    return [];
-  }
   return [
-    violation(rule, `Student has reached the maximum of ${config.maxActiveApplications} active applications.`, {
-      currentCount: count,
-      maxActiveApplications: config.maxActiveApplications,
-    }),
+    check(
+      rule,
+      count < config.maxActiveApplications,
+      `Maximum of ${config.maxActiveApplications} active applications allowed, currently has ${count} active applications.`,
+      { currentCount: count, maxActiveApplications: config.maxActiveApplications }
+    ),
   ];
 }
 
 function evaluateOfferRestriction(
   rule: PlacementRule,
   studentProfile: Awaited<ReturnType<typeof getStudentProfileForActor>>
-): PlacementRuleViolation[] {
+): PlacementRuleCheck[] {
   const config = normalizeOfferBasedRestrictionConfig(rule.config);
   const placement = studentProfile.profile.placement;
   const maxOffers = config.maxOffers ?? Number.MAX_SAFE_INTEGER;
   const blockedPlacementStatuses = config.blockedPlacementStatuses ?? [];
   const blockedOfferStatuses = config.blockedOfferStatuses ?? [];
-  if (config.blockIfPlaced && placement.status === "PLACED") {
-    return [violation(rule, "Student is already placed and cannot apply for additional roles.", { status: placement.status })];
+  const checks: PlacementRuleCheck[] = [];
+
+  if (config.blockIfPlaced) {
+    checks.push(
+      check(rule, placement.status !== "PLACED", "Student must not already be placed to apply for additional roles.", {
+        status: placement.status,
+      })
+    );
   }
-  if (placement.numberOfOffers >= maxOffers) {
-    return [violation(rule, `Student has already reached the maximum of ${maxOffers} offers.`, { numberOfOffers: placement.numberOfOffers })];
+  if (maxOffers < Number.MAX_SAFE_INTEGER) {
+    checks.push(
+      check(
+        rule,
+        placement.numberOfOffers < maxOffers,
+        `Maximum of ${maxOffers} offers allowed, currently has ${placement.numberOfOffers} offers.`,
+        { numberOfOffers: placement.numberOfOffers, maxOffers }
+      )
+    );
   }
-  if (blockedPlacementStatuses.includes(placement.status)) {
-    return [violation(rule, `Student cannot apply while placement status is ${placement.status}.`, { status: placement.status })];
+  if (blockedPlacementStatuses.length > 0) {
+    checks.push(
+      check(
+        rule,
+        !blockedPlacementStatuses.includes(placement.status),
+        `Placement status must not be one of: ${blockedPlacementStatuses.join(", ")} (currently ${placement.status}).`,
+        { status: placement.status, blockedPlacementStatuses }
+      )
+    );
   }
-  if (placement.offerStatus && blockedOfferStatuses.includes(placement.offerStatus)) {
-    return [violation(rule, `Student cannot apply while offer status is ${placement.offerStatus}.`, { offerStatus: placement.offerStatus })];
+  if (blockedOfferStatuses.length > 0) {
+    const offerStatus = placement.offerStatus ?? "none";
+    checks.push(
+      check(
+        rule,
+        !placement.offerStatus || !blockedOfferStatuses.includes(placement.offerStatus),
+        `Offer status must not be one of: ${blockedOfferStatuses.join(", ")} (currently ${offerStatus}).`,
+        { offerStatus: placement.offerStatus, blockedOfferStatuses }
+      )
+    );
   }
-  return [];
+  return checks;
 }
 
 function evaluateCtcRestriction(
   rule: PlacementRule,
   role: Role,
   studentProfile: Awaited<ReturnType<typeof getStudentProfileForActor>>
-): PlacementRuleViolation[] {
+): PlacementRuleCheck[] {
   const config = normalizeCtcBasedRestrictionConfig(rule.config);
   const currentOfferCtc = studentProfile.profile.placement.currentOfferCtc ?? 0;
   if (!role.ctc) {
-    return config.ignoreRolesWithoutCtc ? [violation(rule, "Role CTC is unavailable and cannot satisfy this restriction.", {})] : [];
+    return config.ignoreRolesWithoutCtc
+      ? [check(rule, false, "Role CTC is unavailable and cannot satisfy this restriction.", {})]
+      : [];
   }
   if (config.triggerOnCurrentOfferCtcGte !== undefined && currentOfferCtc < config.triggerOnCurrentOfferCtcGte) {
     return [];
   }
-  if (config.disallowRoleCtcBelow !== undefined && role.ctc < config.disallowRoleCtcBelow) {
-    return [
-      violation(
+
+  const checks: PlacementRuleCheck[] = [];
+  if (config.disallowRoleCtcBelow !== undefined) {
+    checks.push(
+      check(
         rule,
-        `Role CTC ${role.ctc} LPA is below the minimum allowed ${config.disallowRoleCtcBelow} LPA.`,
+        role.ctc >= config.disallowRoleCtcBelow,
+        `Role CTC must be at least ${config.disallowRoleCtcBelow} LPA, this role offers ${role.ctc} LPA.`,
         { roleCtc: role.ctc, minimumAllowedCtc: config.disallowRoleCtcBelow, currentOfferCtc }
-      ),
-    ];
+      )
+    );
   }
   if (currentOfferCtc > 0 && config.minimumPercentAboveCurrentOffer !== undefined) {
     const minimumRequired = currentOfferCtc * (1 + config.minimumPercentAboveCurrentOffer / 100);
-    if (role.ctc < minimumRequired) {
-      return [
-        violation(rule, `Role CTC must be at least ${minimumRequired} LPA based on the student's current offer.`, {
-          roleCtc: role.ctc,
-          currentOfferCtc,
-          minimumRequired,
-        }),
-      ];
-    }
+    checks.push(
+      check(
+        rule,
+        role.ctc >= minimumRequired,
+        `Role CTC must be at least ${minimumRequired} LPA based on the student's current offer, this role offers ${role.ctc} LPA.`,
+        { roleCtc: role.ctc, currentOfferCtc, minimumRequired }
+      )
+    );
   }
   if (currentOfferCtc > 0 && config.minimumAbsoluteIncreaseLpa !== undefined) {
     const minimumRequired = currentOfferCtc + config.minimumAbsoluteIncreaseLpa;
-    if (role.ctc < minimumRequired) {
-      return [
-        violation(rule, `Role CTC must exceed the student's current offer by ${config.minimumAbsoluteIncreaseLpa} LPA.`, {
-          roleCtc: role.ctc,
-          currentOfferCtc,
-          minimumRequired,
-        }),
-      ];
-    }
+    checks.push(
+      check(
+        rule,
+        role.ctc >= minimumRequired,
+        `Role CTC must exceed the student's current offer by ${config.minimumAbsoluteIncreaseLpa} LPA, this role offers ${role.ctc} LPA.`,
+        { roleCtc: role.ctc, currentOfferCtc, minimumRequired }
+      )
+    );
   }
-  return [];
+  return checks;
 }
 
 function evaluateSelectedStudentRestriction(
   rule: PlacementRule,
   applications: Application[],
   targetCompanyId: string
-): PlacementRuleViolation[] {
+): PlacementRuleCheck[] {
   const config = normalizeSelectedStudentRestrictionConfig(rule.config);
   const selectedStatuses = config.selectedStatuses ?? ["SELECTED", "OFFERED", "ACCEPTED"];
   if (!config.blockIfSelected) {
@@ -359,11 +386,8 @@ function evaluateSelectedStudentRestriction(
     }
     return true;
   }).length;
-  if (count === 0) {
-    return [];
-  }
   return [
-    violation(rule, "Student has already been selected and cannot apply under this rule.", {
+    check(rule, count === 0, "Student must not already be selected elsewhere to apply under this rule.", {
       matchingApplications: count,
       selectedStatuses,
       companyScope: config.companyScope,
@@ -376,7 +400,7 @@ function evaluateRoundSpecificRestriction(
   applications: Application[],
   rounds: PlacementRound[],
   targetRole: Role
-): PlacementRuleViolation[] {
+): PlacementRuleCheck[] {
   const config = normalizeRoundSpecificRestrictionConfig(rule.config);
   const applicationStatuses = config.applicationStatuses ?? ["IN_ROUND", "SHORTLISTED", "SELECTED", "OFFERED", "ACCEPTED"];
   const blockedRoundTypes = config.blockedRoundTypes ?? [];
@@ -406,16 +430,13 @@ function evaluateRoundSpecificRestriction(
     return roundTypeMatch && roundIdMatch;
   }).length;
 
-  if (matchingCount === 0) {
-    return [];
-  }
   return [
-    violation(rule, "Student is already participating in a restricted round and cannot apply.", {
-      matchingApplications: matchingCount,
-      blockedRoundTypes,
-      blockedRoundIds,
-      scope: config.scope,
-    }),
+    check(
+      rule,
+      matchingCount === 0,
+      "Student must not already be participating in a restricted round to apply.",
+      { matchingApplications: matchingCount, blockedRoundTypes, blockedRoundIds, scope: config.scope }
+    ),
   ];
 }
 
@@ -790,12 +811,23 @@ function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-function violation(rule: PlacementRule, message: string, details: Record<string, unknown>): PlacementRuleViolation {
+function check(rule: PlacementRule, satisfied: boolean, message: string, details: Record<string, unknown>): PlacementRuleCheck {
   return {
     ruleId: rule.$id,
     ruleName: rule.name,
     ruleType: rule.ruleType,
+    satisfied,
     message,
     details,
+  };
+}
+
+function checkToViolation(item: PlacementRuleCheck): PlacementRuleViolation {
+  return {
+    ruleId: item.ruleId,
+    ruleName: item.ruleName,
+    ruleType: item.ruleType,
+    message: item.message,
+    details: item.details,
   };
 }
