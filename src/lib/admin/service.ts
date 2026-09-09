@@ -103,6 +103,16 @@ export async function getAdminCollectionPage(
     Query.limit(COLLECTION_READ_LIMIT),
   ]);
 
+  let studentsUserStatus: Map<string, boolean> | undefined;
+  if (sectionSlug === "students") {
+    const usersResult = await databases.listDocuments<Models.DefaultDocument>(DATABASE_ID, "users", [
+      Query.equal("universityId", actor.universityId),
+      Query.equal("role", "STUDENT"),
+      Query.limit(COLLECTION_READ_LIMIT),
+    ]);
+    studentsUserStatus = new Map(usersResult.documents.map((doc) => [String(doc.$id), Boolean(doc.isActive)]));
+  }
+
   const search = params.search?.trim() ?? "";
   const sort = params.sort || section.defaultSort || "updatedAt";
   const direction = params.direction || section.defaultDirection || "desc";
@@ -110,7 +120,10 @@ export async function getAdminCollectionPage(
 
   let records = result.documents.map((doc) => ({
     id: doc.$id,
-    values: normalizeDocument(doc),
+    values: normalizeDocument({
+      ...doc,
+      ...(sectionSlug === "students" ? { userIsActive: studentsUserStatus?.get(String(doc.userId)) ?? true } : {}),
+    }),
   }));
 
   records = records.filter((record) => matchesFilters(record.values, filters));

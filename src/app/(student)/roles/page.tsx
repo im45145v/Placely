@@ -3,6 +3,8 @@ import Link from "next/link";
 import { PageWrapper, PageHeader } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { listCompaniesForStudents, listRolesForStudents, type RoleDetail } from "@/lib/companies/service";
+import { evaluateEligibilityResultForRole } from "@/lib/eligibility/service";
+import { getStudentProfileForActor } from "@/lib/student-profile/service";
 import { formatCtc, formatDate } from "@/lib/utils";
 import { StudentRolesList } from "@/features/companies/StudentRolesList";
 import { StatusChip } from "@/components/ui/StatusChip";
@@ -31,7 +33,7 @@ export default async function StudentRolesPage({
   const selectedRoleId = typeof params.roleId === "string" ? params.roleId : "";
   const page = typeof params.page === "string" ? Number(params.page) : 1;
 
-  const [roles, companies] = await Promise.all([
+  const [roles, companies, studentProfile] = await Promise.all([
     listRolesForStudents(actor, {
       search,
       status,
@@ -43,11 +45,19 @@ export default async function StudentRolesPage({
       page,
     }),
     listCompaniesForStudents(actor, { search: "", status: "active", page: 1 }),
+    getStudentProfileForActor(actor),
   ]);
 
   const selectedRole = selectedRoleId
     ? roles.items.find((r) => r.$id === selectedRoleId)
     : roles.items[0];
+
+  const selectedRoleEligibility = selectedRole
+    ? await evaluateEligibilityResultForRole(actor, {
+        roleId: selectedRole.$id,
+        studentProfileId: studentProfile.profile.profileId,
+      })
+    : null;
 
   return (
     <PageWrapper className="p-0">
@@ -152,7 +162,7 @@ export default async function StudentRolesPage({
         {/* Detail panel */}
         <div className="flex-1 overflow-y-auto p-6">
           {selectedRole ? (
-            <StudentRoleDetailPanel role={selectedRole} />
+            <StudentRoleDetailPanel role={selectedRole} eligibility={selectedRoleEligibility} />
           ) : (
             <EmptyState
               title="No roles selected"
@@ -165,7 +175,15 @@ export default async function StudentRolesPage({
   );
 }
 
-function StudentRoleDetailPanel({ role }: { role: RoleDetail }) {
+function StudentRoleDetailPanel({
+  role,
+  eligibility,
+}: {
+  role: RoleDetail;
+  eligibility?: { eligible: boolean } | null;
+}) {
+  const isEligible = eligibility?.eligible ?? true;
+
   return (
     <div className="space-y-6">
       <div>
@@ -181,6 +199,12 @@ function StudentRoleDetailPanel({ role }: { role: RoleDetail }) {
           </StatusChip>
         </div>
       </div>
+
+      {!isEligible && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Applications are now closed. You are not eligible to apply for this Job Profile.
+        </div>
+      )}
 
       <Card>
         <CardHeader>
@@ -218,7 +242,7 @@ function StudentRoleDetailPanel({ role }: { role: RoleDetail }) {
             <CardTitle className="text-lg">Job Description</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-foreground">{role.jdText}</p>
+            <p className="whitespace-pre-line text-sm text-foreground">{role.jdText}</p>
           </CardContent>
         </Card>
       )}
@@ -239,6 +263,26 @@ function StudentRoleDetailPanel({ role }: { role: RoleDetail }) {
                 </span>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(role.requiredQualifications?.length || role.eligibilityRuleSet?.description) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Eligibility Criteria</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {role.eligibilityRuleSet?.description && (
+              <p className="text-sm text-foreground">{role.eligibilityRuleSet.description}</p>
+            )}
+            {role.requiredQualifications?.length ? (
+              <ul className="list-inside list-disc space-y-1 text-sm text-foreground">
+                {role.requiredQualifications.map((qualification) => (
+                  <li key={qualification}>{qualification}</li>
+                ))}
+              </ul>
+            ) : null}
           </CardContent>
         </Card>
       )}

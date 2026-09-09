@@ -151,6 +151,45 @@ export async function updateStudentProfileForActor(
   return nextView;
 }
 
+export async function updateStudentActivationForAdmin(
+  actor: AppUser,
+  targetUserId: string,
+  isActive: boolean
+): Promise<{ userId: string; isActive: boolean }> {
+  if (actor.role !== "PLACEMENT_ADMIN" && actor.role !== "SUPER_ADMIN") {
+    throw AppError.forbidden("Only admins can change student access.");
+  }
+
+  const user = await readUser(targetUserId);
+  if (user.role !== "STUDENT") {
+    throw AppError.validationError("Only student accounts can be frozen or unfrozen.");
+  }
+  if (user.universityId !== actor.universityId) {
+    throw AppError.forbidden("The student does not belong to your university.");
+  }
+
+  const databases = getServerDatabases();
+  const updated = await databases.updateDocument<Models.DefaultDocument>(
+    DATABASE_ID,
+    Collections.USERS,
+    targetUserId,
+    {
+      isActive,
+      updatedAt: new Date().toISOString(),
+    }
+  );
+
+  await createAuditLog(actor, {
+    action: isActive ? "student.unfrozen" : "student.frozen",
+    entityType: "user",
+    entityId: targetUserId,
+    previousValue: { isActive: user.isActive },
+    newValue: { isActive: Boolean(updated.isActive), userId: targetUserId },
+  });
+
+  return { userId: targetUserId, isActive: Boolean(updated.isActive) };
+}
+
 async function readUser(userId: string): Promise<AppUser> {
   const databases = getServerDatabases();
   try {

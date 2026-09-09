@@ -11,9 +11,10 @@ export function AdminCollectionExplorer({ data }: { data: AdminCollectionPageDat
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recordState, setRecordState] = useState(data.records);
   const [isPending, startTransition] = useTransition();
 
-  const currentPageIds = useMemo(() => data.records.map((record) => record.id), [data.records]);
+  const currentPageIds = useMemo(() => recordState.map((record) => record.id), [recordState]);
   const allPageSelected = currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.includes(id));
 
   function toggle(id: string): void {
@@ -36,7 +37,7 @@ export function AdminCollectionExplorer({ data }: { data: AdminCollectionPageDat
           return;
         }
 
-        const selectedRecords = data.records.filter((record) => selectedIds.includes(record.id));
+        const selectedRecords = recordState.filter((record) => selectedIds.includes(record.id));
         if (selectedRecords.length === 0) {
           throw new Error("Select at least one record first.");
         }
@@ -59,6 +60,35 @@ export function AdminCollectionExplorer({ data }: { data: AdminCollectionPageDat
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Bulk action failed.");
       }
+    });
+  }
+
+  function toggleStudentStatus(userId: string, currentIsActive: boolean): void {
+    setMessage(null);
+    setError(null);
+    startTransition(async () => {
+      const response = await fetch(`/api/admin/students/${userId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !currentIsActive }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setError(payload.message ?? "Failed to update student status.");
+        return;
+      }
+
+      setRecordState((current) =>
+        current.map((record) =>
+          String(record.values.userId ?? record.id) === userId
+            ? {
+                ...record,
+                values: { ...record.values, userIsActive: Boolean(payload.isActive) },
+              }
+            : record
+        )
+      );
+      setMessage(payload.isActive ? "Student profile re-enabled." : "Student profile frozen.");
     });
   }
 
@@ -104,23 +134,42 @@ export function AdminCollectionExplorer({ data }: { data: AdminCollectionPageDat
                   {data.columns.map((column) => (
                     <th key={column} className="px-3 py-2 text-left font-medium">{labelize(column)}</th>
                   ))}
+                  {data.section.slug === "students" ? <th className="px-3 py-2 text-left font-medium">Access</th> : null}
                 </tr>
               </thead>
               <tbody>
-                {data.records.map((record) => (
-                  <tr key={record.id} className="border-t border-border align-top">
-                    <td className="px-3 py-3">
-                      <input type="checkbox" checked={selectedIds.includes(record.id)} onChange={() => toggle(record.id)} aria-label={`Select ${record.id}`} />
-                    </td>
-                    {data.columns.map((column) => (
-                      <td key={column} className="max-w-[240px] px-3 py-3 text-muted-foreground">
-                        <div className="truncate" title={formatValue(readValue(record.values, column))}>
-                          {formatValue(readValue(record.values, column))}
-                        </div>
+                {recordState.map((record) => {
+                  const rowUserId = String(record.values.userId ?? record.id);
+                  const rowIsActive = Boolean(record.values.userIsActive ?? record.values.isActive ?? true);
+
+                  return (
+                    <tr key={record.id} className="border-t border-border align-top">
+                      <td className="px-3 py-3">
+                        <input type="checkbox" checked={selectedIds.includes(record.id)} onChange={() => toggle(record.id)} aria-label={`Select ${record.id}`} />
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                      {data.columns.map((column) => (
+                        <td key={column} className="max-w-[240px] px-3 py-3 text-muted-foreground">
+                          <div className="truncate" title={formatValue(readValue(record.values, column))}>
+                            {formatValue(readValue(record.values, column))}
+                          </div>
+                        </td>
+                      ))}
+                      {data.section.slug === "students" ? (
+                        <td className="px-3 py-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={rowIsActive ? "outline" : "secondary"}
+                            onClick={() => toggleStudentStatus(rowUserId, rowIsActive)}
+                            loading={isPending}
+                          >
+                            {rowIsActive ? "Freeze" : "Unfreeze"}
+                          </Button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

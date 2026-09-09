@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { PageWrapper } from "@/components/layout/PageWrapper";
 import { requireStudentAccess } from "@/lib/auth/guards";
 import { getRoleDetailForStudent } from "@/lib/companies/service";
+import { evaluateEligibilityResultForRole } from "@/lib/eligibility/service";
+import { getStudentProfileForActor } from "@/lib/student-profile/service";
 import { formatCtc, formatDate } from "@/lib/utils";
 import { StudentApplyButton } from "@/features/applications/StudentApplyButton";
 import { DetailTabs } from "@/components/ui/DetailTabs";
@@ -22,7 +24,14 @@ export default async function RoleDetailPage({
 }) {
   const actor = await requireStudentAccess();
   const { roleId } = await params;
-  const role = await getRoleDetailForStudent(actor, roleId);
+  const [role, studentProfile] = await Promise.all([
+    getRoleDetailForStudent(actor, roleId),
+    getStudentProfileForActor(actor),
+  ]);
+  const eligibility = await evaluateEligibilityResultForRole(actor, {
+    roleId,
+    studentProfileId: studentProfile.profile.profileId,
+  });
   const search = searchParams ? await searchParams : {};
   const activeTab = typeof search.tab === "string" ? search.tab : "overview";
 
@@ -64,9 +73,15 @@ export default async function RoleDetailPage({
             <CardContent className="pt-6">
               {activeTab === "overview" && (
                 <div className="space-y-6">
+                  {!eligibility.eligible && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      Applications are now closed. You are not eligible to apply for this Job Profile.
+                    </div>
+                  )}
+
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">Description</h3>
-                    <p className="mt-2 text-sm text-foreground">
+                    <p className="mt-2 whitespace-pre-line text-sm text-foreground">
                       {role.jdText || "No description provided."}
                     </p>
                   </div>
@@ -115,8 +130,26 @@ export default async function RoleDetailPage({
 
               {activeTab === "eligibility" && (
                 <div className="space-y-4">
+                  {!eligibility.eligible && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      You are not eligible for this Job Profile.
+                    </div>
+                  )}
+
                   <div className="flex flex-col gap-3 text-sm text-foreground">
-                    <p>Please review the eligibility criteria with your placement office.</p>
+                    {role.eligibilityRuleSet?.description ? (
+                      <p>{role.eligibilityRuleSet.description}</p>
+                    ) : (
+                      <p>Please review the eligibility criteria with your placement office.</p>
+                    )}
+
+                    {role.requiredQualifications?.length ? (
+                      <ul className="list-inside list-disc space-y-1">
+                        {role.requiredQualifications.map((qual) => (
+                          <li key={qual}>{qual}</li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 </div>
               )}

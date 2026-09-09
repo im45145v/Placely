@@ -35,7 +35,7 @@ export const ADMIN_SECTIONS: AdminSectionConfig[] = [
       { key: "academic.graduationYear", label: "Graduation Year", options: ["2024", "2025", "2026", "2027", "2028"] },
     ],
     searchableFields: ["userId", "academic.ugDegree", "academic.ugBranch", "professional.skills", "placement.status"],
-    columns: ["userId", "academic.ugDegree", "academic.ugBranch", "academic.graduationYear", "placement.status", "isProfileComplete", "updatedAt"],
+    columns: ["userId", "userIsActive", "academic.ugDegree", "academic.ugBranch", "academic.graduationYear", "placement.status", "isProfileComplete", "updatedAt"],
   },
   {
     slug: "companies",
