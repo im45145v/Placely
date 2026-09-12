@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
-import { formatCtc, formatDate } from "@/lib/utils";
+import { RoleCard } from "@/components/roles/RoleCard";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { RoleDetail } from "@/lib/companies/service";
 
 interface StudentRolesListProps {
@@ -28,46 +28,33 @@ export function StudentRolesList({
 }: StudentRolesListProps): React.ReactElement {
   if (roles.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 p-6 text-center">
-        <p className="text-sm font-medium text-foreground">No roles found</p>
-        <p className="text-xs text-muted-foreground">Try adjusting your filters</p>
+      <div className="p-6">
+        <EmptyState
+          title="No roles found"
+          description="Try adjusting your filters — or make sure your profile is complete so you are eligible for more roles."
+          action={
+            <Link
+              href="/profile"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Complete your profile
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   return (
     <>
-      <div className="flex flex-col gap-1 p-3">
+      <div className="animate-fade-in-up flex flex-col gap-1 p-3">
         {roles.map((role) => (
-          <Link
+          <RoleCard
             key={role.$id}
+            role={role}
             href={buildRoleSelectionHref(role.$id, queryParams)}
-            className={cn(
-              "rounded-md border border-transparent p-3 text-left transition-colors",
-              selectedRoleId === role.$id
-                ? "border-primary bg-accent/20"
-                : "hover:bg-accent/10"
-            )}
-          >
-            <h3 className="text-xs font-semibold text-foreground line-clamp-2">
-              {role.title}
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {role.company.name}
-            </p>
-            <div className="mt-2 flex items-center justify-between">
-              {role.ctc && (
-                <span className="text-xs font-medium text-foreground">
-                  {formatCtc(role.ctc)}
-                </span>
-              )}
-              {role.applicationDeadline && (
-                <span className="text-xs text-muted-foreground">
-                  {formatDate(role.applicationDeadline)}
-                </span>
-              )}
-            </div>
-          </Link>
+            selected={selectedRoleId === role.$id}
+          />
         ))}
       </div>
       <div className="border-t border-border p-3 text-xs text-muted-foreground">
