@@ -45,7 +45,7 @@ export default async function StudentLayout({
           showDesktopNav={false}
           userDisplayName={appUser.name}
           profileHref="/profile"
-        />
+          />
         <ImportantAnnouncementsFeed initialAnnouncements={announcements} />
         <div className="flex flex-1 overflow-hidden">
           <StudentSidebar items={STUDENT_SIDEBAR_ITEMS} />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -39,7 +39,39 @@ export function Header({
   logo,
 }: HeaderProps): React.ReactElement {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
   const pathname = usePathname();
+
+  // Escape closes the mobile menu and returns focus to the toggle.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+        mobileToggleRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
+
+  function toggleMobileMenu(): void {
+    setMobileMenuOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        // Move focus into the menu once it renders.
+        queueMicrotask(() => {
+          document
+            .querySelector<HTMLElement>('[aria-label="Mobile navigation"] a')
+            ?.focus();
+        });
+      }
+      return next;
+    });
+  }
+
+  const isActiveHref = (href: string): boolean =>
+    pathname != null && (pathname === href || pathname.startsWith(`${href}/`));
   const hasMobileNav = (mobileNavGroups && mobileNavGroups.length > 0) || (navItems && navItems.length > 0);
 
   return (
@@ -63,7 +95,7 @@ export function Header({
                 href={item.href}
                 className={cn(
                   "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  isActiveHref(item.href)
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
@@ -84,8 +116,9 @@ export function Header({
           {/* Mobile menu toggle */}
           {hasMobileNav && (
             <button
+              ref={mobileToggleRef}
               className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-accent md:hidden"
-              onClick={() => setMobileMenuOpen((prev) => !prev)}
+              onClick={toggleMobileMenu}
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileMenuOpen}
             >
@@ -120,7 +153,7 @@ export function Header({
                           onClick={() => setMobileMenuOpen(false)}
                           className={cn(
                             "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                            pathname === item.href || pathname.startsWith(`${item.href}/`)
+                            isActiveHref(item.href)
                               ? "bg-accent text-accent-foreground"
                               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                           )}
@@ -142,7 +175,7 @@ export function Header({
                     onClick={() => setMobileMenuOpen(false)}
                     className={cn(
                       "flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                      pathname === item.href || pathname.startsWith(`${item.href}/`)
+                      isActiveHref(item.href)
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                     )}
