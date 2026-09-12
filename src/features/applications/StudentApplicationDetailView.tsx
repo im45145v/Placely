@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Collections } from "@/lib/appwrite/constants";
 import { getApplicationRealtimeChannels, getDocumentRealtimeChannel } from "@/lib/appwrite/realtime";
@@ -118,7 +119,7 @@ export function StudentApplicationDetailView({
           <CardDescription>Current application summary</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <p><strong>Status:</strong> {application.status}</p>
+          <p className="flex items-center gap-2"><strong>Status:</strong> <StatusChip variant={statusChipVariant(application.status)}>{application.status}</StatusChip></p>
           <p><strong>Current round:</strong> {application.currentRound?.round.name ?? "Not assigned yet"}</p>
           <p><strong>Applied:</strong> {formatDate(application.appliedAt)}</p>
           <p><strong>Last changed:</strong> {formatDate(application.lastStatusChangedAt)}</p>
@@ -127,6 +128,14 @@ export function StudentApplicationDetailView({
       </Card>
     </div>
   );
+}
+
+function statusChipVariant(status: ApplicationDetail["status"]) {
+  if (status === "REJECTED") return "rejected";
+  if (status === "WITHDRAWN") return "closed";
+  if (status === "APPLIED") return "applied";
+  if (status === "SHORTLISTED" || status === "SELECTED" || status === "OFFERED" || status === "ACCEPTED") return "eligible";
+  return "pending";
 }
 
 function timelinePillClass(state: string): string {

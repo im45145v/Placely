@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { StatusChip } from "@/components/ui/StatusChip";
+import { ApplicationTimeline } from "@/components/applications/ApplicationTimeline";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Collections } from "@/lib/appwrite/constants";
 import { getCollectionRealtimeChannel } from "@/lib/appwrite/realtime";
@@ -91,16 +92,13 @@ export function StudentApplicationsView({
                 <p className="text-sm text-muted-foreground">{application.company.name}</p>
                 <p className="text-xs text-muted-foreground">Applied {formatDate(application.appliedAt)}</p>
                 <div className="flex flex-wrap gap-2">
-                  {application.workflow.map((entry) => (
-                    <span key={entry.round.$id} className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs">
-                      <span className={timelineDotClass(entry.state)} />
-                      {entry.round.sequence}. {entry.round.name}
-                    </span>
-                  ))}
+                  <StatusChip variant={statusChipVariant(application.status)}>
+                    {application.status}
+                  </StatusChip>
                 </div>
+                <ApplicationTimeline workflow={application.workflow} className="mt-1" />
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={statusBadgeVariant(application.status)}>{application.status}</Badge>
                 {(application.status === "APPLIED" || application.status === "SHORTLISTED") ? (
                   <Button type="button" variant="outline" size="sm" loading={isPending} onClick={() => withdraw(application.$id)}>
                     Withdraw
@@ -116,16 +114,10 @@ export function StudentApplicationsView({
   );
 }
 
-function statusBadgeVariant(status: ApplicationDetail["status"]) {
-  if (status === "REJECTED" || status === "WITHDRAWN") return "danger";
-  if (status === "SHORTLISTED" || status === "SELECTED" || status === "OFFERED" || status === "ACCEPTED") return "success";
-  return "outline";
-}
-
-function timelineDotClass(state: ApplicationDetail["workflow"][number]["state"]): string {
-  if (state === "selected") return "h-2.5 w-2.5 rounded-full bg-emerald-500";
-  if (state === "completed") return "h-2.5 w-2.5 rounded-full bg-sky-500";
-  if (state === "active") return "h-2.5 w-2.5 rounded-full bg-amber-500";
-  if (state === "rejected") return "h-2.5 w-2.5 rounded-full bg-rose-500";
-  return "h-2.5 w-2.5 rounded-full bg-border";
+function statusChipVariant(status: ApplicationDetail["status"]) {
+  if (status === "REJECTED") return "rejected";
+  if (status === "WITHDRAWN") return "closed";
+  if (status === "APPLIED") return "applied";
+  if (status === "SHORTLISTED" || status === "SELECTED" || status === "OFFERED" || status === "ACCEPTED") return "eligible";
+  return "pending";
 }
