@@ -20,6 +20,7 @@ export function NotificationCenter({
 }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState(initialNotifications);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const refreshInFlightRef = useRef(false);
   const queuedRef = useRef(false);
@@ -34,8 +35,10 @@ export function NotificationCenter({
     try {
       const response = await fetch("/api/notifications", { cache: "no-store" });
       if (!response.ok) {
+        setRefreshError("Couldn't refresh notifications. Showing the last known list.");
         return;
       }
+      setRefreshError(null);
       const payload = await response.json() as { notifications: Notification[]; unreadCount: number };
       setNotifications(payload.notifications);
       setUnreadCount(payload.unreadCount);
@@ -78,6 +81,11 @@ export function NotificationCenter({
 
   return (
     <div className="space-y-6">
+      {refreshError ? (
+        <p role="status" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {refreshError}
+        </p>
+      ) : null}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
