@@ -33,6 +33,7 @@ export function StatusChip({
 }: StatusChipProps): React.ReactElement {
   return (
     <span
+      aria-label={typeof children === "string" ? children : undefined}
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
         variantClasses[variant],
