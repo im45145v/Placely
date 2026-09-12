@@ -258,7 +258,14 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
   }
 
   function runBulkAction(action: "shortlist" | "reject" | "move_to_round" | "auto_shortlist", mode: "selection" | "filtered"): void {
-    if (action === "reject" && !window.confirm("Reject all targeted candidates?")) {
+    const targetedCount = mode === "selection"
+      ? selectedIds.length
+      : visibleApplications.length;
+    const actionLabel = action === "move_to_round" ? "move to round" : action;
+    const confirmed = window.confirm(
+      `Reject ${targetedCount} ${targetedCount === 1 ? "candidate" : "candidates"}?`
+    );
+    if (action === "reject" && !confirmed) {
       return;
     }
 
@@ -286,7 +293,11 @@ export function AdminApplicationsManager({ initialData, initialFilters }: AdminA
         setApplications((current) => current.map((item) => byId.get(item.$id) ?? item));
       }
       setSelectedIds([]);
-      setMessage(data.mode === "queued" ? "Bulk operation queued." : "Bulk operation completed.");
+      setMessage(
+        data.mode === "queued"
+          ? `Bulk ${actionLabel} of ${targetedCount} ${targetedCount === 1 ? "candidate" : "candidates"} queued.`
+          : `Bulk ${actionLabel} completed for ${targetedCount} ${targetedCount === 1 ? "candidate" : "candidates"}.`
+      );
     });
   }
 
