@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { EmptyState } from "@/components/feedback/EmptyState";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import { Collections } from "@/lib/appwrite/constants";

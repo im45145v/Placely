@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { EmptyState } from "@/components/feedback/EmptyState";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHeader, PageWrapper } from "@/components/layout/PageWrapper";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { AdminCollectionExplorer } from "@/features/admin/AdminCollectionExplorer";

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
-import { EmptyState } from "@/components/feedback/EmptyState";
+import { EmptyState } from "@/components/ui/EmptyState";
 import type { AdminCollectionPageData } from "@/lib/admin/service";
 
 export function AdminCollectionExplorer({ data }: { data: AdminCollectionPageData }) {
